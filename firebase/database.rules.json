@@ -1,0 +1,34 @@
+{
+  "rules": {
+    "devices": {
+      "$deviceId": {
+        // Authenticated users can read telemetry and connection status
+        ".read": "auth != null",
+        
+        // Only authenticated users can write commands or update schedules
+        "command": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['commandId', 'command', 'status'])"
+        },
+        "schedule": {
+          ".write": "auth != null"
+        },
+        
+        // Status and connection can be updated by the ESP32 (via Firebase token or DB secret)
+        // or by authenticated operators
+        "status": {
+          ".write": "auth != null || auth.token.firebase.sign_in_provider == 'anonymous'"
+        },
+        "connection": {
+          ".write": "auth != null || auth.token.firebase.sign_in_provider == 'anonymous'"
+        },
+        "sessions": {
+          ".write": "auth != null || auth.token.firebase.sign_in_provider == 'anonymous'"
+        },
+        "logs": {
+          ".write": "auth != null || auth.token.firebase.sign_in_provider == 'anonymous'"
+        }
+      }
+    }
+  }
+}
