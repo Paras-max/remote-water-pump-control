@@ -2,7 +2,7 @@ import { rtdb, isFirebaseConfigured } from './firebase';
 import { ref, set, onValue, off, serverTimestamp } from 'firebase/database';
 import { DeviceCommand, CommandType, DeviceData } from '../types/pump';
 import { mockStore } from './mockStore';
-import { simulationService } from './simulationService';
+import { simulationService } from './simulationService'; // Local simulator fallback
 
 export class PumpService {
   /**
