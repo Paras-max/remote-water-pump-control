@@ -13,8 +13,12 @@ export class DeviceService {
    */
   isDeviceOnline(connection: DeviceConnection): boolean {
     if (!connection || !connection.lastSeen) return false;
+    let lastSeenMs = connection.lastSeen;
+    if (lastSeenMs < 10000000000) {
+      lastSeenMs = lastSeenMs * 1000;
+    }
     const now = Date.now();
-    const diff = now - connection.lastSeen;
+    const diff = now - lastSeenMs;
     return diff >= 0 && diff < HEARTBEAT_TIMEOUT_MS;
   }
 
@@ -23,14 +27,21 @@ export class DeviceService {
    */
   getLastSeenText(lastSeen: number): string {
     if (!lastSeen) return 'Never';
-    const seconds = Math.floor((Date.now() - lastSeen) / 1000);
-    if (seconds < 5) return 'Just now';
+    let lastSeenMs = lastSeen;
+    if (lastSeenMs < 10000000000) {
+      lastSeenMs = lastSeenMs * 1000;
+    }
+    const now = Date.now();
+    const seconds = Math.floor((now - lastSeenMs) / 1000);
+    if (seconds < 0 || seconds < 5) return 'Just now';
     if (seconds < 60) return `${seconds}s ago`;
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
-    return new Date(lastSeen).toLocaleDateString();
+    const days = Math.floor(hours / 24);
+    if (days > 365) return 'Offline';
+    return `${days}d ago`;
   }
 
   /**

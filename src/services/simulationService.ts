@@ -12,8 +12,11 @@ class SimulationService {
 
   constructor() {
     const saved = localStorage.getItem('aquaflow_simulation_mode');
-    this.isSimulationEnabled = saved !== null ? saved === 'true' : true;
-    this.startHeartbeat();
+    // If real Firebase is configured, default to FALSE so real NodeMCU/ESP32 controls the system
+    this.isSimulationEnabled = saved !== null ? saved === 'true' : !isFirebaseConfigured;
+    if (this.isSimulationEnabled && !isFirebaseConfigured) {
+      this.startHeartbeat();
+    }
   }
 
   public isEnabled(): boolean {
@@ -134,26 +137,21 @@ class SimulationService {
    */
   public startHeartbeat(deviceId: string = 'Pump-001') {
     if (this.heartbeatIntervalId) return;
+    // Real hardware (NodeMCU / ESP32) publishes real heartbeats; do not pollute Firebase
+    if (isFirebaseConfigured) return;
 
     this.heartbeatIntervalId = setInterval(() => {
       if (this.isSimulatedOffline) return;
       const now = Date.now();
 
-      if (isFirebaseConfigured && rtdb) {
-        update(ref(rtdb, `devices/${deviceId}/connection`), {
+      mockStore.updateDevice((prev) => ({
+        ...prev,
+        connection: {
+          ...prev.connection,
           online: true,
-          lastSeen: serverTimestamp(),
-        });
-      } else {
-        mockStore.updateDevice((prev) => ({
-          ...prev,
-          connection: {
-            ...prev.connection,
-            online: true,
-            lastSeen: now,
-          },
-        }));
-      }
+          lastSeen: now,
+        },
+      }));
     }, 10000);
   }
 

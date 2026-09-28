@@ -40,3 +40,7 @@ ui-debug.log
 .env
 .env.local
 .env.*.local
+
+# Local Driver Downloads
+CP210x_Driver/
+CP210x_Driver.zip

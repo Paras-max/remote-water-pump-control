@@ -162,6 +162,45 @@ export function usePumpDevice(deviceId: string = 'Pump-001'): UsePumpDeviceResul
 
   const pendingAction = pipelinePhase === 'sending' || pipelinePhase === 'sent' || pipelinePhase === 'acknowledged';
 
+  // Automated Schedule Background Monitor
+  useEffect(() => {
+    if (!device?.schedule?.enabled || !device.schedule.startTime || !device.schedule.stopTime) {
+      return;
+    }
+
+    const checkSchedule = () => {
+      const now = new Date();
+      const currentDay = now.getDay();
+      const activeDays = device.schedule?.daysOfWeek || [];
+      if (!activeDays.includes(currentDay)) return;
+
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const currentTimeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const start = device.schedule!.startTime!;
+      const stop = device.schedule!.stopTime!;
+
+      const isMotorOn = device.status.motorStatus === 'ON';
+      const isFault = device.status.motorStatus === 'FAULT' || device.status.fault;
+
+      // Inside start-stop window
+      if (currentTimeStr >= start && currentTimeStr < stop) {
+        if (!isMotorOn && !isFault && !pendingAction) {
+          console.log(`[Scheduler] Auto starting pump for scheduled slot (${start} - ${stop})`);
+          turnOnPump();
+        }
+      } else if (currentTimeStr >= stop) {
+        if (isMotorOn && !pendingAction) {
+          console.log(`[Scheduler] Auto stopping pump after scheduled slot (${stop})`);
+          turnOffPump();
+        }
+      }
+    };
+
+    checkSchedule();
+    const interval = setInterval(checkSchedule, 15000);
+    return () => clearInterval(interval);
+  }, [device?.schedule, device?.status?.motorStatus, device?.status?.fault, pendingAction, turnOnPump, turnOffPump]);
+
   return {
     device,
     loading,

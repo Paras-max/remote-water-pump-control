@@ -35,8 +35,21 @@ export function useStopwatch(
 
   const elapsedSeconds = useMemo(() => {
     if (isRunning && motorStartedAt) {
-      const diff = Math.floor((now - motorStartedAt) / 1000);
-      return diff > 0 ? diff : 0;
+      let startedMs = motorStartedAt;
+      // Handle seconds vs milliseconds unit mismatch
+      if (startedMs < 10000000000) {
+        startedMs = startedMs * 1000;
+      }
+      // If timestamp is not a valid modern epoch (e.g. from millis() before NTP synced)
+      if (startedMs < 1577836800000) {
+        return 0;
+      }
+      const diff = Math.floor((now - startedMs) / 1000);
+      // Guard against impossible durations (e.g. > 1000 hours or negative)
+      if (diff < 0 || diff > 3600000) {
+        return 0;
+      }
+      return diff;
     }
     // When motor is OFF, retain the last completed runtime duration
     return lastRuntimeSeconds || 0;
