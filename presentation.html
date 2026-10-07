@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AquaFlow — Smart Village Water Management System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:   #050d1f;
+      --dark:   #0a1628;
+      --card:   #0f1e38;
+      --blue:   #1a8cff;
+      --cyan:   #00d4ff;
+      --teal:   #00b4a6;
+      --green:  #00e676;
+      --gold:   #ffd740;
+      --purple: #7c4dff;
+      --red:    #ff5252;
+      --text:   #e8f0fe;
+      --muted:  #7f8fa6;
+      --glass:  rgba(255,255,255,0.04);
+      --border: rgba(0,212,255,0.15);
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--navy);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    #presentation {
+      width: 100vw; height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 64px 60px 80px;
+      opacity: 0;
+      transform: translateX(60px);
+      transition: opacity 0.55s cubic-bezier(.4,0,.2,1), transform 0.55s cubic-bezier(.4,0,.2,1);
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .slide.active {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: all;
+    }
+    .slide.exit-left {
+      opacity: 0;
+      transform: translateX(-60px);
+      pointer-events: none;
+    }
+    .slide.row { flex-direction: row; align-items: stretch; gap: 40px; }
+
+    .bg-grid {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.04) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none;
+    }
+    .bg-glow {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+      animation: pulse-glow 6s ease-in-out infinite alternate;
+    }
+    @keyframes pulse-glow {
+      from { opacity: 0.3; transform: scale(1); }
+      to   { opacity: 0.6; transform: scale(1.1); }
+    }
+
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 52px;
+      background: rgba(5,13,31,0.9);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 32px; z-index: 999;
+    }
+    .logo {
+      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 18px;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .logo-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: 14px; -webkit-text-fill-color: initial;
+    }
+    .project-tag {
+      font-size: 11px; color: var(--muted); font-weight: 400;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      -webkit-text-fill-color: var(--muted);
+    }
+    #fs-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--muted); padding: 4px 12px; border-radius: 6px;
+      font-size: 12px; cursor: pointer; font-family: 'Inter', sans-serif;
+      transition: all 0.2s;
+    }
+    #fs-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+
+    #progress {
+      position: fixed; top: 52px; left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--cyan), var(--blue));
+      box-shadow: 0 0 10px var(--cyan);
+      transition: width 0.5s cubic-bezier(.4,0,.2,1);
+      z-index: 998;
+    }
+
+    #nav {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 16px;
+      background: rgba(10,22,40,0.85); backdrop-filter: blur(20px);
+      border: 1px solid var(--border); border-radius: 50px;
+      padding: 10px 20px; z-index: 999;
+    }
+    .nav-btn {
+      background: none; border: 1.5px solid var(--border);
+      color: var(--text); width: 40px; height: 40px; border-radius: 50%;
+      cursor: pointer; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .nav-btn:hover { background: var(--blue); border-color: var(--blue); box-shadow: 0 0 16px rgba(26,140,255,0.5); }
+    .nav-dots { display: flex; gap: 8px; align-items: center; }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--muted); cursor: pointer; transition: all 0.3s ease;
+    }
+    .dot.active {
+      width: 24px; border-radius: 4px;
+      background: var(--cyan); box-shadow: 0 0 10px rgba(0,212,255,0.6);
+    }
+    #slide-counter {
+      font-size: 12px; color: var(--muted); min-width: 40px; text-align: center;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    #kb-hint {
+      position: fixed; top: 70px; right: 20px;
+      font-size: 11px; color: var(--muted);
+      background: rgba(10,22,40,0.8); border: 1px solid var(--border);
+      border-radius: 8px; padding: 6px 12px;
+      opacity: 0; animation: fadeInOut 4s ease 1s forwards;
+    }
+    @keyframes fadeInOut {
+      0% { opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; }
+    }
+
+    .tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+      padding: 5px 14px; border-radius: 20px; border: 1px solid; margin-bottom: 14px;
+    }
+    .tag-blue   { color: var(--cyan);   border-color: rgba(0,212,255,0.3);   background: rgba(0,212,255,0.08); }
+    .tag-green  { color: var(--green);  border-color: rgba(0,230,118,0.3);   background: rgba(0,230,118,0.08); }
+    .tag-gold   { color: var(--gold);   border-color: rgba(255,215,64,0.3);  background: rgba(255,215,64,0.08); }
+    .tag-purple { color: var(--purple); border-color: rgba(124,77,255,0.3);  background: rgba(124,77,255,0.08); }
+
+    h1.hero-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: clamp(34px, 4.5vw, 62px);
+      font-weight: 900; line-height: 1.05; letter-spacing: -1px; text-align: center;
+      background: linear-gradient(135deg, #fff 0%, var(--cyan) 60%, var(--blue) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: 14px;
+    }
+    h2.slide-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: clamp(26px, 3vw, 44px);
+      font-weight: 800; line-height: 1.1; letter-spacing: -0.5px;
+    }
+    p.lead {
+      font-size: clamp(13px, 1.2vw, 16px);
+      color: rgba(232,240,254,0.7); line-height: 1.7;
+      max-width: 680px; text-align: center;
+    }
+    .glass-card {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: 20px; backdrop-filter: blur(10px); padding: 24px 28px;
+    }
+
+    /* ── SLIDE 1 ── */
+    #slide-1 { background: radial-gradient(ellipse 80% 70% at 50% 50%, rgba(0,100,180,0.2) 0%, transparent 70%), var(--navy); }
+    .hero-img {
+      width: min(560px, 78vw); border-radius: 20px;
+      box-shadow: 0 0 80px rgba(0,212,255,0.2); margin-bottom: 28px;
+      border: 1px solid var(--border);
+      animation: float 4s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-10px); }
+    }
+    .hero-subtitle {
+      font-size: clamp(12px, 1vw, 14px); color: var(--muted);
+      letter-spacing: 3px; text-transform: uppercase; text-align: center; margin-top: 8px;
+    }
+    .phase-badges { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
+    .phase-badge {
+      padding: 7px 18px; border-radius: 50px; font-size: 12px; font-weight: 600;
+      border: 1.5px solid; transition: all 0.3s ease;
+    }
+    .phase-badge:nth-child(1) { color: var(--cyan);  border-color: var(--cyan);  background: rgba(0,212,255,0.1); }
+    .phase-badge:nth-child(2) { color: var(--green); border-color: var(--green); background: rgba(0,230,118,0.1); }
+    .phase-badge:nth-child(3) { color: var(--gold);  border-color: var(--gold);  background: rgba(255,215,64,0.1); }
+    .phase-badge:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+
+    /* ── SLIDE 2 ── */
+    #slide-2 { background: radial-gradient(ellipse 60% 60% at 20% 80%, rgba(124,77,255,0.12) 0%, transparent 60%), var(--navy); }
+    .problem-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+      width: 100%; max-width: 880px; margin-top: 26px;
+    }
+    .problem-card {
+      background: var(--glass); border: 1px solid var(--border); border-radius: 16px;
+      padding: 20px 18px; text-align: center; transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .problem-card:hover { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(0,0,0,0.3); }
+    .problem-icon { font-size: 32px; margin-bottom: 10px; display: block; }
+    .problem-card h4 { font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+    .problem-card p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    /* ── SLIDE 3 ── */
+    #slide-3 { background: radial-gradient(ellipse 60% 60% at 80% 20%, rgba(0,180,166,0.12) 0%, transparent 60%), var(--navy); }
+    .roadmap {
+      display: flex; align-items: stretch; gap: 0;
+      width: 100%; max-width: 960px; margin-top: 28px;
+    }
+    .roadmap-item { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; }
+    .roadmap-item:not(:last-child)::after {
+      content: ''; position: absolute; top: 27px; right: -50%;
+      width: 100%; height: 2px; background: var(--border);
+    }
+    .roadmap-num {
+      width: 54px; height: 54px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 20px;
+      border: 2px solid; position: relative; z-index: 1; margin-bottom: 14px;
+    }
+    .roadmap-num.blue  { color: var(--cyan);  border-color: var(--cyan);  background: rgba(0,212,255,0.1); }
+    .roadmap-num.green { color: var(--green); border-color: var(--green); background: rgba(0,230,118,0.1); }
+    .roadmap-num.gold  { color: var(--gold);  border-color: var(--gold);  background: rgba(255,215,64,0.1); }
+    .roadmap-body {
+      background: var(--glass); border: 1px solid var(--border); border-radius: 16px;
+      padding: 18px 16px; text-align: center; width: calc(100% - 28px);
+    }
+    .roadmap-body h4 { font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+    .roadmap-body p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .arch-flow {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
+      background: var(--glass); border: 1px solid var(--border); border-radius: 14px;
+      padding: 14px 22px; margin-top: 22px; width: 100%; max-width: 960px;
+    }
+    .arch-node { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .arch-box {
+      padding: 7px 13px; border-radius: 10px; font-size: 11px; font-weight: 600;
+      border: 1px solid; text-align: center; white-space: nowrap;
+    }
+    .arch-box.app    { color: var(--cyan);   border-color: rgba(0,212,255,0.3);  background: rgba(0,212,255,0.08);  }
+    .arch-box.cloud  { color: var(--blue);   border-color: rgba(26,140,255,0.3); background: rgba(26,140,255,0.08); }
+    .arch-box.net    { color: var(--purple); border-color: rgba(124,77,255,0.3); background: rgba(124,77,255,0.08); }
+    .arch-box.hw     { color: var(--green);  border-color: rgba(0,230,118,0.3);  background: rgba(0,230,118,0.08);  }
+    .arch-box.pump   { color: var(--gold);   border-color: rgba(255,215,64,0.3); background: rgba(255,215,64,0.08); }
+    .arch-arrow { font-size: 18px; color: var(--border); }
+    .arch-label { font-size: 10px; color: var(--muted); text-align: center; }
+
+    /* ── PHASE SLIDES SHARED ── */
+    .phase-left { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    .phase-right { flex: 1.2; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+    .phase-img {
+      width: 100%; border-radius: 16px;
+      border: 1px solid var(--border); box-shadow: 0 0 50px rgba(0,180,255,0.15);
+    }
+    .feature-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+    .feature-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13px; line-height: 1.5; color: rgba(232,240,254,0.85);
+    }
+    .feat-icon {
+      width: 26px; height: 26px; border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; flex-shrink: 0; margin-top: 1px;
+    }
+    .feat-icon.blue   { background: rgba(0,212,255,0.15);  }
+    .feat-icon.green  { background: rgba(0,230,118,0.15);  }
+    .feat-icon.gold   { background: rgba(255,215,64,0.15); }
+    .feat-icon.purple { background: rgba(124,77,255,0.15); }
+    .feat-icon.red    { background: rgba(255,82,82,0.15);  }
+
+    /* ── SLIDE 4 ── */
+    #slide-4 { background: radial-gradient(ellipse 60% 60% at 10% 50%, rgba(0,140,255,0.15) 0%, transparent 60%), var(--navy); }
+
+    /* ── SLIDE 5 ── */
+    #slide-5 { background: radial-gradient(ellipse 50% 50% at 90% 90%, rgba(0,140,255,0.12) 0%, transparent 60%), var(--navy); }
+    .tech-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+      width: 100%; max-width: 920px; margin-top: 22px;
+    }
+    .tech-card {
+      background: var(--glass); border: 1px solid var(--border); border-radius: 14px;
+      padding: 18px 14px; text-align: center; transition: all 0.3s ease;
+    }
+    .tech-card:hover { transform: translateY(-5px); border-color: rgba(0,212,255,0.35); box-shadow: 0 12px 32px rgba(0,0,0,0.3); }
+    .tech-emoji { font-size: 28px; display: block; margin-bottom: 8px; }
+    .tech-card h4 { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+    .tech-card p  { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+    /* ── SLIDE 6 ── */
+    #slide-6 { background: radial-gradient(ellipse 60% 60% at 80% 50%, rgba(0,230,118,0.12) 0%, transparent 60%), var(--navy); }
+    .valve-demo {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .valve-demo-title {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 1.5px; margin-bottom: 2px; font-weight: 600;
+    }
+    .farmer-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 10px;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      transition: all 0.3s ease;
+    }
+    .farmer-row:hover { border-color: var(--border); }
+    .farmer-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; background: rgba(255,255,255,0.08); flex-shrink: 0;
+    }
+    .farmer-info { flex: 1; }
+    .farmer-name { font-size: 12px; font-weight: 600; }
+    .farmer-crop { font-size: 10px; color: var(--muted); }
+    .valve-toggle { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .toggle-switch {
+      width: 38px; height: 20px; border-radius: 10px; position: relative;
+      cursor: pointer; transition: background 0.3s ease;
+    }
+    .toggle-switch.on  { background: var(--green); }
+    .toggle-switch.off { background: rgba(255,82,82,0.4); }
+    .toggle-knob {
+      position: absolute; width: 14px; height: 14px; border-radius: 50%;
+      background: white; top: 3px; transition: left 0.3s ease;
+    }
+    .toggle-switch.on  .toggle-knob { left: 21px; }
+    .toggle-switch.off .toggle-knob { left: 3px; }
+    .valve-status { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+    .valve-status.open   { color: var(--green); background: rgba(0,230,118,0.12); }
+    .valve-status.closed { color: var(--red);   background: rgba(255,82,82,0.12); }
+
+    /* ── SLIDE 7 ── */
+    #slide-7 { background: radial-gradient(ellipse 60% 60% at 50% 10%, rgba(255,215,64,0.1) 0%, transparent 60%), var(--navy); }
+    .crop-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
+    .crop-table th {
+      text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border);
+      color: var(--cyan); font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    }
+    .crop-table td {
+      padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: rgba(232,240,254,0.8);
+    }
+    .crop-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .crop-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 5px;
+    }
+    .water-bar-wrap { background: rgba(255,255,255,0.06); border-radius: 4px; height: 7px; width: 100%; overflow: hidden; }
+    .water-bar { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--cyan), var(--blue)); }
+    .ai-card {
+      background: linear-gradient(135deg, rgba(255,215,64,0.08), rgba(124,77,255,0.08));
+      border: 1px solid rgba(255,215,64,0.2); border-radius: 14px; padding: 16px; margin-top: 12px;
+    }
+    .ai-card h4 { font-size: 13px; font-weight: 700; color: var(--gold); margin-bottom: 8px; }
+    .ai-steps { display: flex; flex-direction: column; gap: 7px; }
+    .ai-step { display: flex; align-items: flex-start; gap: 9px; font-size: 12px; color: rgba(232,240,254,0.8); line-height: 1.4; }
+    .step-num {
+      width: 20px; height: 20px; border-radius: 50%; background: rgba(255,215,64,0.2);
+      color: var(--gold); font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+
+    /* ── SLIDE 8 ── */
+    #slide-8 { background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(0,180,166,0.12) 0%, transparent 65%), var(--navy); }
+    .benefits-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+      width: 100%; max-width: 920px; margin-top: 26px;
+    }
+    .benefit-card {
+      background: var(--glass); border: 1px solid var(--border); border-radius: 18px;
+      padding: 20px 18px; transition: all 0.3s ease;
+    }
+    .benefit-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+    .benefit-stat { font-family: 'Outfit', sans-serif; font-size: 34px; font-weight: 900; line-height: 1; margin-bottom: 3px; }
+    .benefit-label { font-size: 12px; font-weight: 600; margin-bottom: 5px; }
+    .benefit-desc  { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+
+    /* ── SLIDE 9 ── */
+    #slide-9 {
+      background: radial-gradient(ellipse 80% 70% at 50% 50%, rgba(0,100,200,0.2) 0%, transparent 70%), var(--navy);
+      text-align: center;
+    }
+    .conclusion-cards { display: flex; gap: 18px; margin-top: 26px; flex-wrap: wrap; justify-content: center; }
+    .conclusion-card {
+      background: var(--glass); border: 1px solid var(--border); border-radius: 16px;
+      padding: 20px 24px; text-align: left; min-width: 220px; flex: 1; max-width: 260px;
+      transition: all 0.3s ease;
+    }
+    .conclusion-card:hover { transform: translateY(-5px); box-shadow: 0 16px 36px rgba(0,0,0,0.3); }
+    .conclusion-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+    .conclusion-card p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .big-cta {
+      margin-top: 30px; display: inline-flex; align-items: center; gap: 10px;
+      background: linear-gradient(135deg, var(--blue), var(--cyan));
+      color: var(--navy); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 15px;
+      padding: 13px 34px; border-radius: 50px; cursor: pointer; border: none;
+      box-shadow: 0 0 40px rgba(0,212,255,0.3); transition: all 0.3s ease;
+    }
+    .big-cta:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 0 60px rgba(0,212,255,0.5); }
+    .watermark {
+      position: absolute; bottom: 80px; right: 40px;
+      font-size: 10px; color: var(--muted); opacity: 0.5; letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="logo">
+    <div class="logo-icon">💧</div>
+    AquaFlow
+    <span class="project-tag">Smart Village Water Management System</span>
+  </div>
+  <button id="fs-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+</div>
+
+<div id="progress"></div>
+<div id="kb-hint">← → Arrow Keys to Navigate</div>
+
+<div id="presentation">
+
+  <!-- ══════════════ SLIDE 1 — TITLE ══════════════ -->
+  <div class="slide active" id="slide-1">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:500px;height:500px;top:-100px;left:-100px;background:radial-gradient(circle,rgba(0,140,255,0.3),transparent)"></div>
+    <div class="bg-glow" style="width:400px;height:400px;bottom:-80px;right:-80px;background:radial-gradient(circle,rgba(0,180,166,0.25),transparent);animation-delay:-3s"></div>
+
+    <img class="hero-img" src="C:/Users/PARAS/.gemini/antigravity-ide/brain/734939fc-69ce-409e-a284-c17363b0e2ec/water_system_hero_1791090013590.jpg" alt="Smart Village Water Management Hero" />
+
+    <h1 class="hero-title">Smart Village<br/>Water Management</h1>
+    <p class="hero-subtitle">A Three-Phase IoT + AI Solution for Agricultural Irrigation</p>
+
+    <div class="phase-badges">
+      <div class="phase-badge">Phase 1 — Remote Pump Control</div>
+      <div class="phase-badge">Phase 2 — Smart Valve System</div>
+      <div class="phase-badge">Phase 3 — AI-Driven Irrigation</div>
+    </div>
+    <div class="watermark">Confidential — Project Proposal 2026</div>
+  </div>
+
+  <!-- ══════════════ SLIDE 2 — PROBLEM ══════════════ -->
+  <div class="slide" id="slide-2">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:400px;height:400px;bottom:-100px;left:-80px;background:radial-gradient(circle,rgba(124,77,255,0.2),transparent)"></div>
+
+    <div class="tag tag-purple">🎯 Problem Statement</div>
+    <h2 class="slide-title" style="text-align:center;margin-bottom:8px;">The Irrigation Challenge<br/>in Rural Villages</h2>
+    <p class="lead">Traditional agricultural water systems are inefficient, uncontrolled, and wasteful — costing farmers time, money, and precious water resources.</p>
+
+    <div class="problem-grid">
+      <div class="problem-card"><span class="problem-icon">🚶</span><h4>Physical Presence Required</h4><p>Farmers must travel to wells to manually start/stop pumps — often at odd hours, wasting time and energy.</p></div>
+      <div class="problem-card"><span class="problem-icon">💧</span><h4>Water Wastage</h4><p>Without precise control, water is over-supplied to fields regardless of crop type or actual requirement.</p></div>
+      <div class="problem-card"><span class="problem-icon">⚡</span><h4>High Power Consumption</h4><p>Motors run longer than necessary, driving up electricity costs for individual farmers and the community.</p></div>
+      <div class="problem-card"><span class="problem-icon">🤝</span><h4>No Individual Control</h4><p>All farmers share the same water flow — one farmer's need affects all others, causing conflicts.</p></div>
+      <div class="problem-card"><span class="problem-icon">🌾</span><h4>Crop-Blind Irrigation</h4><p>No system accounts for different crop water needs — rice, wheat, and vegetables need very different amounts.</p></div>
+      <div class="problem-card"><span class="problem-icon">📵</span><h4>Zero Remote Access</h4><p>No digital monitoring means farmers cannot check pump status, runtime, or fault conditions remotely.</p></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SLIDE 3 — OVERVIEW ══════════════ -->
+  <div class="slide" id="slide-3">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:500px;height:500px;top:-120px;right:-100px;background:radial-gradient(circle,rgba(0,180,166,0.15),transparent)"></div>
+
+    <div class="tag tag-blue">🗺️ Project Roadmap</div>
+    <h2 class="slide-title" style="text-align:center;margin-bottom:8px;">Three-Phase Implementation Plan</h2>
+    <p class="lead">A structured, scalable approach — each phase builds on the previous, delivering increasing value to the farming community.</p>
+
+    <div class="roadmap">
+      <div class="roadmap-item">
+        <div class="roadmap-num blue">1</div>
+        <div class="roadmap-body">
+          <h4 style="color:var(--cyan)">🔌 Remote Pump Control</h4>
+          <p>IoT-enabled 4G remote control of two well motors. Real-time status, emergency shutdown, and current sensing via web/mobile app.</p>
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-num green">2</div>
+        <div class="roadmap-body">
+          <h4 style="color:var(--green)">🚰 Smart Valve Distribution</h4>
+          <p>Electronic solenoid valves on each farmer's pipe branch. Per-farmer individual water control via app — any farmer can opt in/out independently.</p>
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-num gold">3</div>
+        <div class="roadmap-body">
+          <h4 style="color:var(--gold)">🤖 AI Precision Irrigation</h4>
+          <p>Crop-aware AI formula computes exact water volume per acre per crop type. Automated, optimised irrigation — zero waste, maximum yield.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-flow">
+      <div class="arch-node"><div class="arch-box app">📱 Mobile App</div><div class="arch-label">Farmer / Admin</div></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><div class="arch-box cloud">☁️ Firebase Cloud</div><div class="arch-label">Real-time DB</div></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><div class="arch-box net">📡 4G Network</div><div class="arch-label">Jio Dongle</div></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><div class="arch-box hw">🔧 ESP8266/ESP32</div><div class="arch-label">Edge Controller</div></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><div class="arch-box pump">⚙️ Motor + Valves</div><div class="arch-label">Field Hardware</div></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SLIDE 4 — PHASE 1 ══════════════ -->
+  <div class="slide row" id="slide-4">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:400px;height:400px;top:-80px;left:-80px;background:radial-gradient(circle,rgba(0,140,255,0.2),transparent)"></div>
+
+    <div class="phase-left">
+      <div class="tag tag-blue">⚡ Phase 1</div>
+      <h2 class="slide-title" style="color:var(--cyan);margin-bottom:8px;">Remote Pump<br/>Control System</h2>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:4px;">
+        Two wells in the village, each fitted with an electric motor pump. Farmers start and stop motors remotely through our web app — from anywhere, via 4G.
+      </p>
+      <ul class="feature-list">
+        <li><div class="feat-icon blue">🪣</div><span><strong>2 Village Wells</strong> — Each with a dedicated submersible motor that draws water and pushes it through the main distribution pipe to the farms.</span></li>
+        <li><div class="feat-icon blue">📱</div><span><strong>Remote ON/OFF Control</strong> — Operators control motors via web or mobile app over 4G internet — no physical presence needed at the well.</span></li>
+        <li><div class="feat-icon green">⏱️</div><span><strong>Real-Time Runtime Monitoring</strong> — Live HH:MM:SS stopwatch tracks how long each motor has been running.</span></li>
+        <li><div class="feat-icon red">🚨</div><span><strong>Emergency Shutdown</strong> — One-tap emergency OFF immediately de-energises the motor contactor from anywhere.</span></li>
+        <li><div class="feat-icon gold">⚡</div><span><strong>ACS712 Current Sensing</strong> — Live current monitoring detects dry-run faults or motor failures automatically.</span></li>
+        <li><div class="feat-icon purple">💾</div><span><strong>Session History & CSV Export</strong> — Every pump cycle is logged with start/end time, duration, and average current.</span></li>
+      </ul>
+    </div>
+
+    <div class="phase-right">
+      <img class="phase-img" src="C:/Users/PARAS/.gemini/antigravity-ide/brain/734939fc-69ce-409e-a284-c17363b0e2ec/phase1_pump_control_1791090030314.jpg" alt="Phase 1 - Pump Control" />
+      <div class="glass-card" style="padding:14px 18px;">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:80px;text-align:center;">
+            <div style="font-family:'Outfit',sans-serif;font-size:26px;font-weight:900;color:var(--cyan)">2</div>
+            <div style="font-size:10px;color:var(--muted)">Wells Covered</div>
+          </div>
+          <div style="flex:1;min-width:80px;text-align:center;">
+            <div style="font-family:'Outfit',sans-serif;font-size:26px;font-weight:900;color:var(--green)">4G</div>
+            <div style="font-size:10px;color:var(--muted)">Remote Access</div>
+          </div>
+          <div style="flex:1;min-width:80px;text-align:center;">
+            <div style="font-family:'Outfit',sans-serif;font-size:26px;font-weight:900;color:var(--gold)">24/7</div>
+            <div style="font-size:10px;color:var(--muted)">Monitoring</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SLIDE 5 — PHASE 1 TECH ══════════════ -->
+  <div class="slide" id="slide-5">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:400px;height:400px;bottom:-100px;right:-80px;background:radial-gradient(circle,rgba(0,140,255,0.15),transparent)"></div>
+
+    <div class="tag tag-blue">🔧 Phase 1 — Technology Stack</div>
+    <h2 class="slide-title" style="text-align:center;margin-bottom:4px;">Under the Hood</h2>
+    <p class="lead" style="margin-bottom:0;">Industrial-grade components, cloud-native architecture, zero compromise on reliability.</p>
+
+    <div class="tech-grid">
+      <div class="tech-card"><span class="tech-emoji">🔬</span><h4>NodeMCU ESP8266</h4><p>Edge microcontroller. Wi-Fi + 4G enabled. Controls relay, reads current sensor, syncs with Firebase every 10s.</p></div>
+      <div class="tech-card"><span class="tech-emoji">🔁</span><h4>5V Relay + AC Contactor</h4><p>Optocoupled relay module drives the AC contactor coil to switch the motor ON/OFF safely at mains voltage.</p></div>
+      <div class="tech-card"><span class="tech-emoji">⚡</span><h4>ACS712 Sensor</h4><p>Hall-effect current sensor measures real-time motor draw. Detects dry-run and hardware faults automatically.</p></div>
+      <div class="tech-card"><span class="tech-emoji">📡</span><h4>Jio 4G Dongle</h4><p>Cellular internet hotspot at the pump site. Provides reliable connectivity in remote rural locations.</p></div>
+      <div class="tech-card"><span class="tech-emoji">☁️</span><h4>Firebase RTDB</h4><p>Google Cloud Realtime Database. Command queue, heartbeat sync, and session logging with &lt;200ms latency.</p></div>
+      <div class="tech-card"><span class="tech-emoji">⚛️</span><h4>React + TypeScript</h4><p>Modern web app frontend. Mobile-responsive dashboard with live telemetry, stopwatch, and history view.</p></div>
+      <div class="tech-card"><span class="tech-emoji">🌐</span><h4>Vercel Deployment</h4><p>One-click global deployment. Accessible from any phone or browser — just a URL, no app install needed.</p></div>
+      <div class="tech-card"><span class="tech-emoji">🔐</span><h4>Firebase Auth</h4><p>Email/password authentication ensures only authorised operators can control pumps and view data.</p></div>
+    </div>
+
+    <div class="arch-flow">
+      <div class="arch-node"><div class="arch-box app">React App (Vercel)</div><div class="arch-label">User sends command</div></div>
+      <div class="arch-arrow">⇄</div>
+      <div class="arch-node"><div class="arch-box cloud">Firebase RTDB</div><div class="arch-label">/devices/Pump-001/</div></div>
+      <div class="arch-arrow">⇄</div>
+      <div class="arch-node"><div class="arch-box net">4G Hotspot</div><div class="arch-label">Cellular internet</div></div>
+      <div class="arch-arrow">⇄</div>
+      <div class="arch-node"><div class="arch-box hw">ESP8266</div><div class="arch-label">10s heartbeat</div></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><div class="arch-box pump">Relay → Motor</div><div class="arch-label">GPIO 26</div></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SLIDE 6 — PHASE 2 ══════════════ -->
+  <div class="slide row" id="slide-6">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:400px;height:400px;top:-80px;right:-80px;background:radial-gradient(circle,rgba(0,230,118,0.15),transparent)"></div>
+
+    <div class="phase-left">
+      <div class="tag tag-green">🚰 Phase 2</div>
+      <h2 class="slide-title" style="color:var(--green);margin-bottom:8px;">Smart Electronic<br/>Valve Distribution</h2>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px;">
+        After the motor sends water through the main pipe, it branches into individual pipes for each farmer's field. Each branch has an electronic solenoid valve — giving every farmer individual control.
+      </p>
+      <ul class="feature-list">
+        <li><div class="feat-icon green">🔀</div><span><strong>Branched Pipeline</strong> — Main supply pipe splits into N individual farmer pipes, each independently controlled.</span></li>
+        <li><div class="feat-icon green">🔌</div><span><strong>Solenoid Valves</strong> — Electronic normally-closed valves open on command. Fail-safe by default — no power means no flow.</span></li>
+        <li><div class="feat-icon blue">📱</div><span><strong>Per-Farmer App Toggle</strong> — If a farmer doesn't need water, they switch it OFF — their valve stays closed while others receive water normally.</span></li>
+        <li><div class="feat-icon gold">⚖️</div><span><strong>Fair Distribution</strong> — Closed valves redirect pressure to active pipes, improving flow to farmers who need it.</span></li>
+        <li><div class="feat-icon purple">📊</div><span><strong>Usage Tracking</strong> — Individual valve open/close history per farmer for accountability and billing.</span></li>
+      </ul>
+    </div>
+
+    <div class="phase-right">
+      <img class="phase-img" src="C:/Users/PARAS/.gemini/antigravity-ide/brain/734939fc-69ce-409e-a284-c17363b0e2ec/phase2_electronic_valves_1791090058888.jpg" alt="Phase 2 - Electronic Valves" />
+      <div class="valve-demo">
+        <div class="valve-demo-title">🎮 Live Valve Control Demo — Click to Toggle</div>
+        <div class="farmer-row">
+          <div class="farmer-avatar">👨‍🌾</div>
+          <div class="farmer-info"><div class="farmer-name">Farmer A — Field 1</div><div class="farmer-crop">🌾 Rice Paddy · 2 Acres</div></div>
+          <div class="valve-toggle">
+            <div class="toggle-switch on" onclick="toggleValve(this)"><div class="toggle-knob"></div></div>
+            <span class="valve-status open">OPEN</span>
+          </div>
+        </div>
+        <div class="farmer-row">
+          <div class="farmer-avatar">👩‍🌾</div>
+          <div class="farmer-info"><div class="farmer-name">Farmer B — Field 2</div><div class="farmer-crop">🌿 Vegetables · 1.5 Acres</div></div>
+          <div class="valve-toggle">
+            <div class="toggle-switch on" onclick="toggleValve(this)"><div class="toggle-knob"></div></div>
+            <span class="valve-status open">OPEN</span>
+          </div>
+        </div>
+        <div class="farmer-row">
+          <div class="farmer-avatar">👨‍🌾</div>
+          <div class="farmer-info"><div class="farmer-name">Farmer C — Field 3</div><div class="farmer-crop">🌽 Maize · 3 Acres</div></div>
+          <div class="valve-toggle">
+            <div class="toggle-switch on" onclick="toggleValve(this)"><div class="toggle-knob"></div></div>
+            <span class="valve-status open">OPEN</span>
+          </div>
+        </div>
+        <div class="farmer-row">
+          <div class="farmer-avatar">👩‍🌾</div>
+          <div class="farmer-info"><div class="farmer-name">Farmer D — Field 4</div><div class="farmer-crop">🌾 Wheat · 2.5 Acres</div></div>
+          <div class="valve-toggle">
+            <div class="toggle-switch off" onclick="toggleValve(this)"><div class="toggle-knob"></div></div>
+            <span class="valve-status closed">CLOSED</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SLIDE 7 — PHASE 3 ══════════════ -->
+  <div class="slide row" id="slide-7">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:450px;height:450px;top:-100px;left:-100px;background:radial-gradient(circle,rgba(255,215,64,0.1),transparent)"></div>
+
+    <div class="phase-left">
+      <div class="tag tag-gold">🤖 Phase 3</div>
+      <h2 class="slide-title" style="color:var(--gold);margin-bottom:8px;">AI-Powered Precision<br/>Irrigation</h2>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:8px;">
+        Every crop type has a defined water requirement per acre. Our AI engine uses crop type, field size, and seasonal data to calculate the exact water volume needed — then delivers precisely that amount.
+      </p>
+      <div class="ai-card">
+        <h4>🧠 AI Formula Logic</h4>
+        <div class="ai-steps">
+          <div class="ai-step"><div class="step-num">1</div><span>Farmer inputs crop type and field size (acres) via the app.</span></div>
+          <div class="ai-step"><div class="step-num">2</div><span>AI engine references crop-specific water consumption table (liters/acre/day).</span></div>
+          <div class="ai-step"><div class="step-num">3</div><span>Calculates required valve open-duration based on measured flow rate.</span></div>
+          <div class="ai-step"><div class="step-num">4</div><span>Valve auto-closes exactly when the required water volume is delivered.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase-right">
+      <img class="phase-img" src="C:/Users/PARAS/.gemini/antigravity-ide/brain/734939fc-69ce-409e-a284-c17363b0e2ec/phase3_ai_irrigation_1791090073114.jpg" alt="Phase 3 - AI Irrigation" />
+      <div class="glass-card" style="padding:16px 18px;">
+        <h4 style="font-size:11px;color:var(--gold);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase;">Crop Water Requirement Table</h4>
+        <table class="crop-table">
+          <thead>
+            <tr><th>Crop</th><th>Water (L/Acre/Day)</th><th>Relative Volume</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="crop-badge" style="color:var(--cyan);background:rgba(0,212,255,0.1)">🌾 Rice Paddy</span></td>
+              <td>1,800 – 2,400 L</td>
+              <td><div class="water-bar-wrap"><div class="water-bar" style="width:95%"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="crop-badge" style="color:var(--purple);background:rgba(124,77,255,0.1)">🎋 Sugarcane</span></td>
+              <td>1,500 – 2,000 L</td>
+              <td><div class="water-bar-wrap"><div class="water-bar" style="width:80%"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="crop-badge" style="color:var(--gold);background:rgba(255,215,64,0.1)">🌾 Wheat</span></td>
+              <td>600 – 900 L</td>
+              <td><div class="water-bar-wrap"><div class="water-bar" style="width:35%"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="crop-badge" style="color:var(--teal);background:rgba(0,180,166,0.1)">🌽 Maize</span></td>
+              <td>500 – 800 L</td>
+              <td><div class="water-bar-wrap"><div class="water-bar" style="width:30%"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="crop-badge" style="color:var(--green);background:rgba(0,230,118,0.1)">🥦 Vegetables</span></td>
+              <td>400 – 700 L</td>
+              <td><div class="water-bar-wrap"><div class="water-bar" style="width:25%"></div></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SLIDE 8 — BENEFITS ══════════════ -->
+  <div class="slide" id="slide-8">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:500px;height:500px;top:-100px;left:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(0,180,166,0.15),transparent)"></div>
+
+    <div class="tag tag-green">✅ Expected Impact</div>
+    <h2 class="slide-title" style="text-align:center;margin-bottom:8px;">Why This Project Matters</h2>
+    <p class="lead">Measurable, real-world benefits for the village community, farmers, and the environment.</p>
+
+    <div class="benefits-grid">
+      <div class="benefit-card">
+        <div class="benefit-stat" style="color:var(--cyan)">40%</div>
+        <div class="benefit-label">💧 Water Savings</div>
+        <div class="benefit-desc">Precision AI irrigation eliminates over-watering, saving up to 40% water vs. traditional flood irrigation.</div>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-stat" style="color:var(--green)">100%</div>
+        <div class="benefit-label">📱 Remote Access</div>
+        <div class="benefit-desc">Farmers control pumps and valves from home using any smartphone — no travel to the well required.</div>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-stat" style="color:var(--gold)">30%</div>
+        <div class="benefit-label">⚡ Power Reduction</div>
+        <div class="benefit-desc">Motors run only as long as needed. AI shutoff and duration control reduce electricity bills significantly.</div>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-stat" style="color:var(--purple)">4</div>
+        <div class="benefit-label">🧑‍🌾 Farmers Empowered</div>
+        <div class="benefit-desc">Each farmer has independent, real-time control over their own water supply — no more conflicts or disputes.</div>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-stat" style="color:var(--teal)">24/7</div>
+        <div class="benefit-label">🌐 Uptime Monitoring</div>
+        <div class="benefit-desc">10-second heartbeat, fault detection, and session logging provide round-the-clock system visibility.</div>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-stat" style="color:var(--red)">0</div>
+        <div class="benefit-label">🚨 Manual Trips</div>
+        <div class="benefit-desc">Emergency shutdown, dry-run detection, and fault alerts eliminate on-site emergency interventions.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SLIDE 9 — CONCLUSION ══════════════ -->
+  <div class="slide" id="slide-9">
+    <div class="bg-grid"></div>
+    <div class="bg-glow" style="width:500px;height:500px;top:-100px;left:-100px;background:radial-gradient(circle,rgba(0,140,255,0.2),transparent)"></div>
+    <div class="bg-glow" style="width:500px;height:500px;bottom:-100px;right:-100px;background:radial-gradient(circle,rgba(0,180,166,0.2),transparent);animation-delay:-3s"></div>
+
+    <div class="tag tag-blue">🎯 Project Proposal</div>
+    <h1 class="hero-title" style="font-size:clamp(30px,3.8vw,52px);">Approve AquaFlow —<br/>Transform Village Agriculture</h1>
+    <p class="lead">A phased, low-risk, high-impact IoT + AI solution that brings digital transformation to agricultural water management in rural India.</p>
+
+    <div class="conclusion-cards">
+      <div class="conclusion-card">
+        <h4 style="color:var(--cyan)">⚡ Phase 1 — Ready Now</h4>
+        <p>Hardware, firmware, and web application are already developed and tested. Deployable immediately upon approval.</p>
+      </div>
+      <div class="conclusion-card">
+        <h4 style="color:var(--green)">🚰 Phase 2 — 3 Months</h4>
+        <p>Solenoid valve procurement, installation, and integration with Phase 1 system. Minimal additional infrastructure needed.</p>
+      </div>
+      <div class="conclusion-card">
+        <h4 style="color:var(--gold)">🤖 Phase 3 — 6 Months</h4>
+        <p>AI model training with local crop data, flow sensor integration, and automated irrigation scheduling rollout.</p>
+      </div>
+    </div>
+
+    <button class="big-cta">💧 Approve the Project →</button>
+
+    <div style="margin-top:18px;font-size:11px;color:var(--muted);text-align:center;letter-spacing:1px;">
+      Built on AquaFlow 4G · Firebase · ESP8266/ESP32 · React · AI Irrigation Engine
+    </div>
+  </div>
+
+</div>
+
+<!-- NAVIGATION -->
+<div id="nav">
+  <button class="nav-btn" onclick="prevSlide()" title="Previous (←)">←</button>
+  <div class="nav-dots" id="nav-dots"></div>
+  <div id="slide-counter">1 / 9</div>
+  <button class="nav-btn" onclick="nextSlide()" title="Next (→)">→</button>
+</div>
+
+<script>
+  const TOTAL = 9;
+  let current = 1;
+  let isTransitioning = false;
+
+  function init() {
+    const dotsEl = document.getElementById('nav-dots');
+    for (let i = 1; i <= TOTAL; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i === 1 ? ' active' : '');
+      d.onclick = () => goToSlide(i);
+      d.id = 'dot-' + i;
+      dotsEl.appendChild(d);
+    }
+    updateProgress();
+  }
+
+  function goToSlide(n, direction = 'forward') {
+    if (isTransitioning || n === current || n < 1 || n > TOTAL) return;
+    isTransitioning = true;
+
+    const from = document.getElementById('slide-' + current);
+    const to   = document.getElementById('slide-' + n);
+
+    from.classList.add('exit-left');
+    from.classList.remove('active');
+
+    to.style.transform = direction === 'forward' ? 'translateX(60px)' : 'translateX(-60px)';
+    to.style.opacity = '0';
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        to.style.transform = '';
+        to.style.opacity = '';
+        to.classList.add('active');
+      });
+    });
+
+    setTimeout(() => {
+      from.classList.remove('exit-left');
+      from.style.transform = '';
+      isTransitioning = false;
+    }, 580);
+
+    document.getElementById('dot-' + current).classList.remove('active');
+    document.getElementById('dot-' + n).classList.add('active');
+    current = n;
+    document.getElementById('slide-counter').textContent = current + ' / ' + TOTAL;
+    updateProgress();
+  }
+
+  function nextSlide() { goToSlide(current + 1, 'forward'); }
+  function prevSlide() { goToSlide(current - 1, 'back'); }
+
+  function updateProgress() {
+    document.getElementById('progress').style.width = ((current / TOTAL) * 100) + '%';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); prevSlide(); }
+    if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+    if (e.key === 'Home') goToSlide(1);
+    if (e.key === 'End')  goToSlide(TOTAL);
+  });
+
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend',   e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) { dx < 0 ? nextSlide() : prevSlide(); }
+  });
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  function toggleValve(switchEl) {
+    const statusEl = switchEl.parentElement.querySelector('.valve-status');
+    if (switchEl.classList.contains('on')) {
+      switchEl.classList.replace('on', 'off');
+      statusEl.textContent = 'CLOSED';
+      statusEl.classList.replace('open', 'closed');
+    } else {
+      switchEl.classList.replace('off', 'on');
+      statusEl.textContent = 'OPEN';
+      statusEl.classList.replace('closed', 'open');
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
