@@ -8,24 +8,28 @@ interface StopwatchResult {
   minutes: string;            // "18"
   seconds: string;            // "32"
   isRunning: boolean;
+  statusMessage: string;
 }
 
 export function useStopwatch(
   motorStatus: MotorStatus,
   motorStartedAt: number | null,
-  lastRuntimeSeconds: number = 0
+  isOnline: boolean
 ): StopwatchResult {
   const [now, setNow] = useState<number>(Date.now());
 
-  const isRunning = motorStatus === 'ON' && typeof motorStartedAt === 'number' && motorStartedAt > 0;
+  // A live stopwatch is only running when the motor's actual ON state has been confirmed
+  // by the ESP32 and the device is currently online.
+  const isRunning =
+    isOnline &&
+    motorStatus === 'ON' &&
+    typeof motorStartedAt === 'number' &&
+    motorStartedAt > 0;
 
   useEffect(() => {
     if (!isRunning) return;
 
-    // Fast initial sync
     setNow(Date.now());
-
-    // Continuous visual refresh interval (only ticks display, actual elapsed is derived from timestamps)
     const interval = setInterval(() => {
       setNow(Date.now());
     }, 500);
@@ -34,26 +38,29 @@ export function useStopwatch(
   }, [isRunning, motorStartedAt]);
 
   const elapsedSeconds = useMemo(() => {
-    if (isRunning && motorStartedAt) {
-      let startedMs = motorStartedAt;
-      // Handle seconds vs milliseconds unit mismatch
-      if (startedMs < 10000000000) {
-        startedMs = startedMs * 1000;
-      }
-      // If timestamp is not a valid modern epoch (e.g. from millis() before NTP synced)
-      if (startedMs < 1577836800000) {
-        return 0;
-      }
-      const diff = Math.floor((now - startedMs) / 1000);
-      // Guard against impossible durations (e.g. > 1000 hours or negative)
-      if (diff < 0 || diff > 3600000) {
-        return 0;
-      }
-      return diff;
+    if (!isRunning || !motorStartedAt) {
+      return 0;
     }
-    // When motor is OFF, retain the last completed runtime duration
-    return lastRuntimeSeconds || 0;
-  }, [isRunning, motorStartedAt, now, lastRuntimeSeconds]);
+
+    let startedMs = motorStartedAt;
+    // Handle seconds vs milliseconds unit mismatch
+    if (startedMs < 10000000000) {
+      startedMs = startedMs * 1000;
+    }
+
+    // Must be a valid timestamp (>= 2020)
+    if (startedMs < 1577836800000) {
+      return 0;
+    }
+
+    const diff = Math.floor((now - startedMs) / 1000);
+    // Guard against impossible durations (e.g. negative or > 1000 hours)
+    if (diff < 0 || diff > 3600000) {
+      return 0;
+    }
+
+    return diff;
+  }, [isRunning, motorStartedAt, now]);
 
   const { formattedTime, hours, minutes, seconds } = useMemo(() => {
     const totalSecs = Math.max(0, elapsedSeconds);
@@ -75,6 +82,22 @@ export function useStopwatch(
     };
   }, [elapsedSeconds]);
 
+  const statusMessage = useMemo(() => {
+    if (!isOnline) {
+      return 'Offline — Live runtime timer stopped';
+    }
+    if (motorStatus === 'UNKNOWN') {
+      return 'Motor Status Unknown';
+    }
+    if (motorStatus === 'FAULT') {
+      return 'Pump Safety Trip — Motor halted';
+    }
+    if (isRunning) {
+      return 'Motor confirmed ON — Synchronized with ESP32 start timestamp';
+    }
+    return 'Pump is currently stopped';
+  }, [isOnline, motorStatus, isRunning]);
+
   return {
     elapsedSeconds,
     formattedTime,
@@ -82,5 +105,6 @@ export function useStopwatch(
     minutes,
     seconds,
     isRunning,
+    statusMessage,
   };
 }

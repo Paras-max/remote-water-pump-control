@@ -1,113 +1,153 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Play,
   Square,
   Clock,
   Zap,
   AlertTriangle,
-  RotateCw,
   Waves,
   Calendar,
-  CheckCircle2,
-  XCircle,
+  History,
 } from 'lucide-react';
-import { DeviceStatus, MotorStatus } from '../types/pump';
+import { DeviceStatus, RuntimeSession } from '../types/pump';
 import { useStopwatch } from '../hooks/useStopwatch';
+import { sessionService } from '../services/sessionService';
 
 interface PumpStatusCardProps {
   status: DeviceStatus;
   isOnline: boolean;
+  simulated?: boolean;
+  sessions?: RuntimeSession[];
   onResetFault?: () => void;
 }
 
 export const PumpStatusCard: React.FC<PumpStatusCardProps> = ({
   status,
   isOnline,
+  simulated,
+  sessions = [],
   onResetFault,
 }) => {
-  const { motorStatus, motorStartedAt, lastStoppedAt, lastRuntimeSeconds, current, fault, faultType, todayTotalRuntimeSeconds } =
-    status;
+  const {
+    motorStatus,
+    motorStartedAt,
+    lastStoppedAt,
+    lastRuntimeSeconds,
+    current,
+    fault,
+    faultType,
+    todayTotalRuntimeSeconds,
+  } = status;
 
-  const stopwatch = useStopwatch(motorStatus, motorStartedAt, lastRuntimeSeconds);
+  // Live stopwatch hook: ONLY runs when isOnline is true and motor is confirmed ON
+  const stopwatch = useStopwatch(motorStatus, motorStartedAt, isOnline);
 
-  // Status visual configurations
-  const isRunning = motorStatus === 'ON';
-  const isFault = motorStatus === 'FAULT' || fault;
-  const isUnknown = !isOnline || motorStatus === 'UNKNOWN';
+  const isConfirmedRunning = isOnline && motorStatus === 'ON';
+  const isFault = isOnline && (motorStatus === 'FAULT' || fault);
 
   // Format timestamp helper
   const formatTime = (ts: number | null) => {
     if (!ts) return '--:--:--';
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    const normalized = sessionService.normalizeTimestamp(ts);
+    if (!normalized) return '--:--:--';
+    return new Date(normalized).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
   };
 
-  // Format today's seconds into "01h 10m 57s"
-  const formatTodayRuntime = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+  // Format seconds into "01h 10m 57s"
+  const formatDurationDisplay = (seconds: number) => {
+    const total = Math.max(0, Math.floor(seconds));
+    const hrs = Math.floor(total / 3600);
+    const mins = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${pad(hrs)}h ${pad(mins)}m ${pad(secs)}s`;
   };
+
+  // Calculate Today's Total Runtime using calendar boundary / midnight splitting
+  const todayTotalSeconds = useMemo(() => {
+    if (sessions.length > 0) {
+      return sessionService.calculateTodayTotalSeconds(
+        sessions,
+        motorStartedAt,
+        isConfirmedRunning
+      );
+    }
+    // Fallback if session history not yet loaded
+    const base = Number(todayTotalRuntimeSeconds) || 0;
+    return base + (isConfirmedRunning ? stopwatch.elapsedSeconds : 0);
+  }, [sessions, motorStartedAt, isConfirmedRunning, stopwatch.elapsedSeconds, todayTotalRuntimeSeconds]);
 
   return (
     <div
       className={`relative overflow-hidden rounded-3xl p-6 sm:p-8 transition-all duration-500 border ${
         isFault
           ? 'glass-panel-danger'
-          : isRunning
+          : isConfirmedRunning
           ? 'glass-panel-glow'
           : 'glass-panel border-slate-800'
       }`}
     >
-      {/* Background Animated Water / Impeller Glow for Active Running */}
-      {isRunning && (
+      {/* Background Animated Impeller Glow for Active Running */}
+      {isConfirmedRunning && (
         <div className="absolute inset-0 pointer-events-none opacity-20 overflow-hidden">
           <div className="absolute -top-24 -left-24 w-96 h-96 bg-emerald-500/30 rounded-full blur-3xl animate-pulse-slow"></div>
           <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl"></div>
-          {/* Subtle water ripple waves */}
           <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-emerald-500/10 to-transparent"></div>
         </div>
       )}
 
       {/* Top Header Row: System Identity & Status Badge */}
-      <div className="relative z-10 flex items-center justify-between">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center space-x-2">
-          <Waves className={`w-5 h-5 ${isRunning ? 'text-emerald-400 animate-bounce' : 'text-slate-500'}`} />
+          <Waves
+            className={`w-5 h-5 ${
+              isConfirmedRunning ? 'text-emerald-400 animate-bounce' : 'text-slate-500'
+            }`}
+          />
           <span className="text-xs sm:text-sm font-semibold tracking-wider uppercase text-slate-400">
             Water Pump Telemetry
           </span>
+          {simulated && (
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono tracking-wider bg-purple-950/80 border border-purple-700 text-purple-300">
+              SIMULATED
+            </span>
+          )}
         </div>
 
-        {/* Large Prominent Status Badge */}
+        {/* Large Status Badge — Strictly reports UNKNOWN when device is offline */}
         <div
           className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold tracking-wider uppercase shadow-inner ${
-            isFault
-              ? 'bg-rose-950/80 text-rose-300 border border-rose-700/80'
-              : isRunning
-              ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-emerald-900/50'
-              : isUnknown
+            !isOnline
               ? 'bg-amber-950/80 text-amber-300 border border-amber-700/80'
+              : isFault
+              ? 'bg-rose-950/80 text-rose-300 border border-rose-700/80'
+              : isConfirmedRunning
+              ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-emerald-900/50'
               : 'bg-slate-900/90 text-slate-400 border border-slate-700'
           }`}
         >
-          {isFault ? (
+          {!isOnline ? (
+            <>
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+              <span>🟡 ESP32 OFFLINE — STATUS UNKNOWN</span>
+            </>
+          ) : isFault ? (
             <>
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
               <span>⚠️ PUMP FAULT</span>
             </>
-          ) : isRunning ? (
+          ) : isConfirmedRunning ? (
             <>
               <span className="relative flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400"></span>
               </span>
-              <span>🟢 PUMP ON</span>
-            </>
-          ) : isUnknown ? (
-            <>
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              <span>🟡 STATUS UNKNOWN</span>
+              <span>🟢 PUMP ON (CONFIRMED)</span>
             </>
           ) : (
             <>
@@ -118,11 +158,15 @@ export const PumpStatusCard: React.FC<PumpStatusCardProps> = ({
         </div>
       </div>
 
-      {/* Centerpiece: Stopwatch Runtime Display */}
+      {/* Centerpiece: Section A — Current Runtime Stopwatch */}
       <div className="relative z-10 my-8 text-center">
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 text-xs font-medium uppercase tracking-widest mb-3">
-          <Clock className={`w-3.5 h-3.5 ${isRunning ? 'text-emerald-400 animate-spin-slow' : 'text-slate-500'}`} />
-          <span>{isRunning ? 'Current Motor Runtime' : 'Last Completed Runtime'}</span>
+          <Clock
+            className={`w-3.5 h-3.5 ${
+              isConfirmedRunning ? 'text-emerald-400 animate-spin-slow' : 'text-slate-500'
+            }`}
+          />
+          <span>Current Runtime</span>
         </div>
 
         {/* Stopwatch Digits: HH : MM : SS */}
@@ -130,56 +174,72 @@ export const PumpStatusCard: React.FC<PumpStatusCardProps> = ({
           <div className="flex flex-col items-center">
             <span
               className={`p-2 sm:p-3 rounded-2xl border backdrop-blur-md ${
-                isRunning
+                isConfirmedRunning
                   ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-200'
-                  : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                  : 'bg-slate-900/60 border-slate-800 text-slate-400'
               }`}
             >
-              {stopwatch.hours}
+              {isConfirmedRunning ? stopwatch.hours : '--'}
             </span>
-            <span className="text-[10px] sm:text-xs font-sans text-slate-500 mt-1 uppercase font-medium">Hours</span>
+            <span className="text-[10px] sm:text-xs font-sans text-slate-500 mt-1 uppercase font-medium">
+              Hours
+            </span>
           </div>
 
-          <span className={`text-2xl sm:text-4xl ${isRunning ? 'text-emerald-400 animate-pulse' : 'text-slate-600'}`}>
+          <span
+            className={`text-2xl sm:text-4xl ${
+              isConfirmedRunning ? 'text-emerald-400 animate-pulse' : 'text-slate-600'
+            }`}
+          >
             :
           </span>
 
           <div className="flex flex-col items-center">
             <span
               className={`p-2 sm:p-3 rounded-2xl border backdrop-blur-md ${
-                isRunning
+                isConfirmedRunning
                   ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-200'
-                  : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                  : 'bg-slate-900/60 border-slate-800 text-slate-400'
               }`}
             >
-              {stopwatch.minutes}
+              {isConfirmedRunning ? stopwatch.minutes : '--'}
             </span>
-            <span className="text-[10px] sm:text-xs font-sans text-slate-500 mt-1 uppercase font-medium">Minutes</span>
+            <span className="text-[10px] sm:text-xs font-sans text-slate-500 mt-1 uppercase font-medium">
+              Minutes
+            </span>
           </div>
 
-          <span className={`text-2xl sm:text-4xl ${isRunning ? 'text-emerald-400 animate-pulse' : 'text-slate-600'}`}>
+          <span
+            className={`text-2xl sm:text-4xl ${
+              isConfirmedRunning ? 'text-emerald-400 animate-pulse' : 'text-slate-600'
+            }`}
+          >
             :
           </span>
 
           <div className="flex flex-col items-center">
             <span
               className={`p-2 sm:p-3 rounded-2xl border backdrop-blur-md ${
-                isRunning
+                isConfirmedRunning
                   ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300 shadow-lg shadow-emerald-900/30'
-                  : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                  : 'bg-slate-900/60 border-slate-800 text-slate-400'
               }`}
             >
-              {stopwatch.seconds}
+              {isConfirmedRunning ? stopwatch.seconds : '--'}
             </span>
-            <span className="text-[10px] sm:text-xs font-sans text-slate-500 mt-1 uppercase font-medium">Seconds</span>
+            <span className="text-[10px] sm:text-xs font-sans text-slate-500 mt-1 uppercase font-medium">
+              Seconds
+            </span>
           </div>
         </div>
 
-        {/* Stopwatch explanation note */}
+        {/* Stopwatch state / explanation */}
         <p className="mt-2 text-xs text-slate-400">
-          {isRunning
-            ? '⚡ Stopwatch live — synchronizing with ESP32 start timestamp across all devices'
-            : 'Static timestamp-preserved duration from previous pump cycle'}
+          {!isOnline
+            ? 'Hardware is offline — Live timer paused to prevent inaccurate telemetry'
+            : isConfirmedRunning
+            ? '⚡ Live Stopwatch — Elapsed time computed from ESP32 motor start timestamp'
+            : 'Motor stopped — Stopwatch ready for next verified run cycle'}
         </p>
       </div>
 
@@ -208,52 +268,78 @@ export const PumpStatusCard: React.FC<PumpStatusCardProps> = ({
         </div>
       )}
 
-      {/* Telemetry Summary Strip */}
-      <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-800/80 text-left">
-        {/* Today's Total Runtime */}
-        <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/60">
+      {/* Telemetry Summary Strip: Sections B & C separated clearly */}
+      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4 border-t border-slate-800/80 text-left">
+        {/* Metric 1: Last Completed Runtime (Fixed duration from previous cycle) */}
+        <div className="bg-slate-900/50 p-3.5 rounded-xl border border-slate-800/60">
           <div className="text-[11px] text-slate-400 flex items-center space-x-1.5 font-medium">
-            <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Today's Total</span>
+            <History className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Last Completed Runtime</span>
           </div>
           <div className="text-sm sm:text-base font-bold text-slate-200 font-mono-digits mt-1">
-            {formatTodayRuntime(todayTotalRuntimeSeconds + (isRunning ? stopwatch.elapsedSeconds : 0))}
+            {lastRuntimeSeconds > 0 ? formatDurationDisplay(lastRuntimeSeconds) : '--:--:--'}
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">
+            Fixed duration of most recent session
           </div>
         </div>
 
-        {/* Current Sensor */}
-        <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/60">
+        {/* Metric 2: Today's Total Runtime (Calendar day sum) */}
+        <div className="bg-slate-900/50 p-3.5 rounded-xl border border-slate-800/60">
           <div className="text-[11px] text-slate-400 flex items-center space-x-1.5 font-medium">
-            <Zap className={`w-3.5 h-3.5 ${current > 0 ? 'text-amber-400' : 'text-slate-500'}`} />
+            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Today's Total Runtime</span>
+          </div>
+          <div className="text-sm sm:text-base font-bold text-slate-200 font-mono-digits mt-1">
+            {formatDurationDisplay(todayTotalSeconds)}
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">
+            Midnight-bounded local daily sum
+          </div>
+        </div>
+
+        {/* Metric 3: Current Sensor (Amperes) */}
+        <div className="bg-slate-900/50 p-3.5 rounded-xl border border-slate-800/60">
+          <div className="text-[11px] text-slate-400 flex items-center space-x-1.5 font-medium">
+            <Zap className={`w-3.5 h-3.5 ${isOnline && current > 0 ? 'text-amber-400' : 'text-slate-500'}`} />
             <span>Motor Current</span>
           </div>
           <div className="text-sm sm:text-base font-bold font-mono-digits mt-1 flex items-baseline space-x-1">
-            <span className={current > 0 ? 'text-cyan-400' : 'text-slate-400'}>
-              {current.toFixed(1)}
+            {!isOnline ? (
+              <span className="text-slate-500 text-xs font-sans font-medium">Unavailable</span>
+            ) : (
+              <>
+                <span className={current > 0 ? 'text-cyan-400' : 'text-slate-400'}>
+                  {current.toFixed(1)}
+                </span>
+                <span className="text-xs text-slate-500">Amperes</span>
+              </>
+            )}
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">
+            {isOnline ? 'Real-time ACS712 feedback' : 'Sensor offline'}
+          </div>
+        </div>
+
+        {/* Metric 4: Session Timestamps (Last ON / OFF) */}
+        <div className="bg-slate-900/50 p-3.5 rounded-xl border border-slate-800/60 flex flex-col justify-between">
+          <div className="flex justify-between items-center text-[11px]">
+            <span className="text-slate-400 flex items-center space-x-1">
+              <Play className="w-3 h-3 text-emerald-400" />
+              <span>Started:</span>
             </span>
-            <span className="text-xs text-slate-500">Amperes</span>
+            <span className="font-mono text-slate-300 font-semibold">
+              {formatTime(motorStartedAt)}
+            </span>
           </div>
-        </div>
-
-        {/* Last ON Time */}
-        <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/60">
-          <div className="text-[11px] text-slate-400 flex items-center space-x-1.5 font-medium">
-            <Play className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Last ON Time</span>
-          </div>
-          <div className="text-xs sm:text-sm font-semibold text-slate-300 font-mono-digits mt-1">
-            {formatTime(motorStartedAt)}
-          </div>
-        </div>
-
-        {/* Last OFF Time */}
-        <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/60">
-          <div className="text-[11px] text-slate-400 flex items-center space-x-1.5 font-medium">
-            <Square className="w-3.5 h-3.5 text-rose-400" />
-            <span>Last OFF Time</span>
-          </div>
-          <div className="text-xs sm:text-sm font-semibold text-slate-300 font-mono-digits mt-1">
-            {formatTime(lastStoppedAt)}
+          <div className="flex justify-between items-center text-[11px] mt-1 pt-1 border-t border-slate-800/40">
+            <span className="text-slate-400 flex items-center space-x-1">
+              <Square className="w-3 h-3 text-rose-400" />
+              <span>Stopped:</span>
+            </span>
+            <span className="font-mono text-slate-300 font-semibold">
+              {formatTime(lastStoppedAt)}
+            </span>
           </div>
         </div>
       </div>

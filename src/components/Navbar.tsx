@@ -117,25 +117,32 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Live Connection Pill */}
             <div
               className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-                isOnline
+                isSimulationMode
+                  ? 'bg-purple-950/70 border-purple-700/70 text-purple-300'
+                  : isOnline
                   ? 'bg-emerald-950/60 border-emerald-800/60 text-emerald-400'
                   : 'bg-rose-950/60 border-rose-800/60 text-rose-400 animate-pulse'
               }`}
-              title={`Heartbeat: ${lastSeenText}`}
+              title={isSimulationMode ? 'Running in Virtual Hardware Simulation' : `ESP32 Heartbeat: ${lastSeenText}`}
             >
-              {isOnline ? (
+              {isSimulationMode ? (
+                <>
+                  <Cpu className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Simulated</span>
+                </>
+              ) : isOnline ? (
                 <>
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
                   <Wifi className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Online</span>
+                  <span className="hidden xs:inline">ESP32 Online</span>
                 </>
               ) : (
                 <>
                   <WifiOff className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Offline</span>
+                  <span className="hidden xs:inline">ESP32 Offline</span>
                 </>
               )}
             </div>

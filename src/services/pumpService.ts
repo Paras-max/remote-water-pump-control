@@ -2,12 +2,13 @@ import { rtdb, isFirebaseConfigured } from './firebase';
 import { ref, set, onValue, off, serverTimestamp } from 'firebase/database';
 import { DeviceCommand, CommandType, DeviceData } from '../types/pump';
 import { mockStore } from './mockStore';
-import { simulationService } from './simulationService'; // Local simulator fallback
+import { simulationService } from './simulationService';
+import { deviceService } from './deviceService';
 
 export class PumpService {
   /**
    * Dispatches a control command to the pump via Firebase Realtime Database
-   * or falls back to local simulation store.
+   * or falls back to local simulation store when Firebase is not configured.
    */
   async sendCommand(deviceId: string, commandType: CommandType): Promise<DeviceCommand> {
     const commandId = `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -20,7 +21,7 @@ export class PumpService {
       status: 'pending',
     };
 
-    if (isFirebaseConfigured && rtdb) {
+    if (isFirebaseConfigured && rtdb && !simulationService.isEnabled()) {
       try {
         const commandRef = ref(rtdb, `devices/${deviceId}/command`);
         await set(commandRef, {
@@ -33,7 +34,7 @@ export class PumpService {
         throw error;
       }
     } else {
-      // Use mock store
+      // Use mock store / simulation mode
       mockStore.updateDevice((prev) => ({
         ...prev,
         command,
@@ -46,8 +47,9 @@ export class PumpService {
         level: 'info',
       });
 
-      // If simulation mode is active or no ESP32 is connected, let simulation service process it
-      simulationService.processCommand(deviceId, command);
+      if (simulationService.isEnabled()) {
+        simulationService.processCommand(deviceId, command);
+      }
     }
 
     return command;
@@ -57,32 +59,35 @@ export class PumpService {
    * Subscribes to live device status, connection, and commands in real time.
    */
   subscribeToDevice(deviceId: string, onUpdate: (data: DeviceData) => void): () => void {
-    if (isFirebaseConfigured && rtdb) {
+    if (isFirebaseConfigured && rtdb && !simulationService.isEnabled()) {
       const deviceRef = ref(rtdb, `devices/${deviceId}`);
       const unsubscribe = onValue(
         deviceRef,
         (snapshot) => {
           if (snapshot.exists()) {
             const raw = snapshot.val();
+            const lastSeen = raw.connection?.lastSeen || 0;
+            const isOnline = deviceService.isDeviceOnline({ lastSeen, online: false });
+
             const deviceData: DeviceData = {
               deviceId: raw.deviceId || deviceId,
               name: raw.name || 'Remote Water Pump',
               location: raw.location || 'Site Location',
               connection: {
-                online: Boolean(raw.connection?.online),
-                lastSeen: raw.connection?.lastSeen || 0,
-                signalStrength: raw.connection?.signalStrength ?? -70,
-                ipAddress: raw.connection?.ipAddress,
-                firmwareVersion: raw.connection?.firmwareVersion,
+                online: isOnline,
+                lastSeen,
+                signalStrength: raw.connection?.signalStrength !== undefined ? Number(raw.connection.signalStrength) : undefined,
+                ipAddress: raw.connection?.ipAddress || undefined,
+                firmwareVersion: raw.connection?.firmwareVersion || undefined,
               },
               command: raw.command || null,
               status: {
-                motorStatus: raw.status?.motorStatus || 'OFF',
+                motorStatus: raw.status?.motorStatus || 'UNKNOWN',
                 motorStartedAt: raw.status?.motorStartedAt || null,
                 lastStoppedAt: raw.status?.lastStoppedAt || null,
-                lastRuntimeSeconds: raw.status?.lastRuntimeSeconds || 0,
-                current: Number(raw.status?.current || 0),
-                voltage: Number(raw.status?.voltage || 230),
+                lastRuntimeSeconds: Number(raw.status?.lastRuntimeSeconds || 0),
+                current: raw.status?.current !== undefined ? Number(raw.status.current) : 0,
+                voltage: raw.status?.voltage !== undefined ? Number(raw.status.voltage) : undefined,
                 fault: Boolean(raw.status?.fault),
                 faultType: raw.status?.faultType || 'NONE',
                 todayTotalRuntimeSeconds: Number(raw.status?.todayTotalRuntimeSeconds || 0),
@@ -93,11 +98,38 @@ export class PumpService {
                 stopTime: null,
                 daysOfWeek: [],
               },
-              simulated: Boolean(raw.simulated),
+              simulated: false,
             };
             onUpdate(deviceData);
           } else {
-            console.warn(`[Firebase] Device ${deviceId} not found in RTDB, using defaults`);
+            // Safe initial offline state when node does not exist yet in RTDB
+            onUpdate({
+              deviceId,
+              name: 'Remote Water Pump',
+              location: 'Site Location',
+              connection: {
+                online: false,
+                lastSeen: 0,
+              },
+              command: null,
+              status: {
+                motorStatus: 'UNKNOWN',
+                motorStartedAt: null,
+                lastStoppedAt: null,
+                lastRuntimeSeconds: 0,
+                current: 0,
+                fault: false,
+                faultType: 'NONE',
+                todayTotalRuntimeSeconds: 0,
+              },
+              schedule: {
+                enabled: false,
+                startTime: null,
+                stopTime: null,
+                daysOfWeek: [],
+              },
+              simulated: false,
+            });
           }
         },
         (error) => {
@@ -109,7 +141,17 @@ export class PumpService {
         off(deviceRef);
       };
     } else {
-      return mockStore.subscribeDevice(onUpdate);
+      return mockStore.subscribeDevice((mockData) => {
+        const isOnline = deviceService.isDeviceOnline(mockData.connection);
+        onUpdate({
+          ...mockData,
+          connection: {
+            ...mockData.connection,
+            online: isOnline,
+          },
+          simulated: simulationService.isEnabled(),
+        });
+      });
     }
   }
 

@@ -134,7 +134,7 @@ export const SimulatorDrawer: React.FC<SimulatorDrawerProps> = ({
               {/* Simulate ON */}
               <button
                 onClick={handleSimulateOn}
-                disabled={status.motorStatus === 'ON'}
+                disabled={!isSimEnabled || status.motorStatus === 'ON'}
                 className="flex items-center space-x-2 p-3 rounded-xl bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-800 text-emerald-300 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Play className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -144,7 +144,7 @@ export const SimulatorDrawer: React.FC<SimulatorDrawerProps> = ({
               {/* Simulate OFF */}
               <button
                 onClick={handleSimulateOff}
-                disabled={status.motorStatus === 'OFF'}
+                disabled={!isSimEnabled || status.motorStatus === 'OFF'}
                 className="flex items-center space-x-2 p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Square className="w-4 h-4 text-rose-400 shrink-0" />
@@ -154,7 +154,8 @@ export const SimulatorDrawer: React.FC<SimulatorDrawerProps> = ({
               {/* Simulate Current Fault */}
               <button
                 onClick={handleSimulateFault}
-                className="flex items-center space-x-2 p-3 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 border border-rose-800 text-rose-300 text-xs font-bold transition-all"
+                disabled={!isSimEnabled}
+                className="flex items-center space-x-2 p-3 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 border border-rose-800 text-rose-300 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>Simulate Motor Fault</span>
@@ -163,7 +164,8 @@ export const SimulatorDrawer: React.FC<SimulatorDrawerProps> = ({
               {/* Simulate 4G Network Drop */}
               <button
                 onClick={handleToggleNetwork}
-                className={`flex items-center space-x-2 p-3 rounded-xl border text-xs font-bold transition-all ${
+                disabled={!isSimEnabled}
+                className={`flex items-center space-x-2 p-3 rounded-xl border text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                   offlineSimulated
                     ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
                     : 'bg-amber-950/50 hover:bg-amber-900/60 border-amber-800 text-amber-300'
@@ -182,6 +184,11 @@ export const SimulatorDrawer: React.FC<SimulatorDrawerProps> = ({
                 )}
               </button>
             </div>
+            {!isSimEnabled && (
+              <p className="text-[11px] text-amber-400/90 bg-amber-950/40 p-2.5 rounded-xl border border-amber-800/40">
+                🔒 Simulation is PAUSED. Physical hardware mode active — dashboard is using real ESP32 telemetry only.
+              </p>
+            )}
           </div>
 
           {/* Current State Inspector */}

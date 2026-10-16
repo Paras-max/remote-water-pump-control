@@ -110,23 +110,36 @@ class MockStore {
   private logsListeners: Set<LogsListener> = new Set();
 
   constructor() {
-    const savedDevice = localStorage.getItem('aquaflow_mock_device');
-    const savedSessions = localStorage.getItem('aquaflow_mock_sessions');
-    const savedLogs = localStorage.getItem('aquaflow_mock_logs');
+    let savedDevice: string | null = null;
+    let savedSessions: string | null = null;
+    let savedLogs: string | null = null;
+
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        savedDevice = window.localStorage.getItem('aquaflow_mock_device');
+        savedSessions = window.localStorage.getItem('aquaflow_mock_sessions');
+        savedLogs = window.localStorage.getItem('aquaflow_mock_logs');
+      }
+    } catch (e) {}
 
     this.deviceData = savedDevice ? JSON.parse(savedDevice) : getInitialDeviceData();
     this.sessions = savedSessions ? JSON.parse(savedSessions) : getInitialSessions();
     this.logs = savedLogs ? JSON.parse(savedLogs) : getInitialLogs();
 
-    // Auto-update lastSeen in mock mode so device is online by default
-    this.deviceData.connection.lastSeen = Date.now();
+    // Respect saved timestamp; do not automatically force device online on startup
+    if (!this.deviceData.connection.lastSeen) {
+      this.deviceData.connection.lastSeen = 0;
+      this.deviceData.connection.online = false;
+    }
   }
 
   private save() {
     try {
-      localStorage.setItem('aquaflow_mock_device', JSON.stringify(this.deviceData));
-      localStorage.setItem('aquaflow_mock_sessions', JSON.stringify(this.sessions));
-      localStorage.setItem('aquaflow_mock_logs', JSON.stringify(this.logs));
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('aquaflow_mock_device', JSON.stringify(this.deviceData));
+        window.localStorage.setItem('aquaflow_mock_sessions', JSON.stringify(this.sessions));
+        window.localStorage.setItem('aquaflow_mock_logs', JSON.stringify(this.logs));
+      }
     } catch (e) {
       console.warn('Could not persist to localStorage:', e);
     }

@@ -3,17 +3,20 @@ import { PumpStatusCard } from '../components/PumpStatusCard';
 import { PumpControls } from '../components/PumpControls';
 import { TelemetryGrid } from '../components/TelemetryGrid';
 import { CommandFeedback } from '../components/CommandFeedback';
-import { DeviceData } from '../types/pump';
+import { DeviceData, RuntimeSession } from '../types/pump';
 import { CommandPipelinePhase } from '../hooks/usePumpDevice';
 import { ShieldCheck, HardHat, Info } from 'lucide-react';
 
 interface DashboardPageProps {
   device: DeviceData | null;
   isOnline: boolean;
+  isFirebaseConnected?: boolean;
   lastSeenText: string;
   pipelinePhase: CommandPipelinePhase;
   pipelineMessage: string;
   pendingAction: boolean;
+  sessions?: RuntimeSession[];
+  simulated?: boolean;
   onTurnOn: () => void;
   onTurnOff: () => void;
   onEmergencyOff: () => void;
@@ -24,10 +27,13 @@ interface DashboardPageProps {
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   device,
   isOnline,
+  isFirebaseConnected = true,
   lastSeenText,
   pipelinePhase,
   pipelineMessage,
   pendingAction,
+  sessions = [],
+  simulated = false,
   onTurnOn,
   onTurnOff,
   onEmergencyOff,
@@ -55,6 +61,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       <PumpStatusCard
         status={device.status}
         isOnline={isOnline}
+        simulated={simulated || device.simulated}
+        sessions={sessions}
         onResetFault={onResetFault}
       />
 
@@ -73,7 +81,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         status={device.status}
         connection={device.connection}
         isOnline={isOnline}
+        isFirebaseConnected={isFirebaseConnected}
         lastSeenText={lastSeenText}
+        simulated={simulated || device.simulated}
       />
 
       {/* Engineering Architecture Callout */}
@@ -87,7 +97,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               Hardware-Ready ESP32 Architecture
             </div>
             <div className="text-xs text-slate-400 mt-0.5">
-              Dashboard commands are committed to Firebase RTDB under <code className="text-cyan-300 font-mono">/devices/{device.deviceId}/command</code>. The ESP32 confirms contactor engagement through its ACS712 current sensor.
+              Dashboard commands are committed to Firebase RTDB under{' '}
+              <code className="text-cyan-300 font-mono">/devices/{device.deviceId}/command</code>.
+              The ESP32 confirms contactor engagement through its ACS712 current sensor.
             </div>
           </div>
         </div>

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { DeviceData, CommandType, CommandStatus } from '../types/pump';
+import { DeviceData, CommandType } from '../types/pump';
 import { pumpService } from '../services/pumpService';
 import { deviceService } from '../services/deviceService';
+import { isFirebaseConfigured, rtdb } from '../services/firebase';
+import { ref, onValue, off } from 'firebase/database';
 
 export type CommandPipelinePhase =
   | 'idle'
@@ -17,6 +19,7 @@ interface UsePumpDeviceResult {
   device: DeviceData | null;
   loading: boolean;
   isOnline: boolean;
+  isFirebaseConnected: boolean;
   lastSeenText: string;
   pipelinePhase: CommandPipelinePhase;
   pipelineMessage: string;
@@ -34,15 +37,35 @@ export function usePumpDevice(deviceId: string = 'Pump-001'): UsePumpDeviceResul
   const [pipelinePhase, setPipelinePhase] = useState<CommandPipelinePhase>('idle');
   const [pipelineMessage, setPipelineMessage] = useState<string>('');
   const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
-  const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [lastSeenText, setLastSeenText] = useState<string>('Just now');
+  // Do NOT assume ESP32 is online on application startup
+  const [isOnline, setIsOnline] = useState<boolean>(false);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(!isFirebaseConfigured);
+  const [lastSeenText, setLastSeenText] = useState<string>('Checking...');
   const timeoutRef = useRef<any>(null);
+
+  // Monitor Firebase Web Client Connectivity (.info/connected)
+  useEffect(() => {
+    if (isFirebaseConfigured && rtdb) {
+      const connectedRef = ref(rtdb, '.info/connected');
+      onValue(connectedRef, (snap) => {
+        setIsFirebaseConnected(Boolean(snap.val()));
+      });
+      return () => {
+        off(connectedRef);
+      };
+    } else {
+      setIsFirebaseConnected(true);
+    }
+  }, []);
 
   // Subscribe to real-time device updates
   useEffect(() => {
     setLoading(true);
     const unsubscribe = pumpService.subscribeToDevice(deviceId, (data) => {
       setDevice(data);
+      const online = deviceService.isDeviceOnline(data.connection);
+      setIsOnline(online);
+      setLastSeenText(deviceService.getLastSeenText(data.connection?.lastSeen));
       setLoading(false);
     });
 
@@ -52,18 +75,20 @@ export function usePumpDevice(deviceId: string = 'Pump-001'): UsePumpDeviceResul
     };
   }, [deviceId]);
 
-  // Periodic heartbeat online evaluation (every 4 seconds)
+  // Periodic heartbeat online evaluation (every 2.5 seconds)
   useEffect(() => {
     const checkConnection = () => {
       if (device) {
         const online = deviceService.isDeviceOnline(device.connection);
         setIsOnline(online);
-        setLastSeenText(deviceService.getLastSeenText(device.connection.lastSeen));
+        setLastSeenText(deviceService.getLastSeenText(device.connection?.lastSeen));
+      } else {
+        setIsOnline(false);
       }
     };
 
     checkConnection();
-    const interval = setInterval(checkConnection, 4000);
+    const interval = setInterval(checkConnection, 2500);
     return () => clearInterval(interval);
   }, [device]);
 
@@ -81,10 +106,10 @@ export function usePumpDevice(deviceId: string = 'Pump-001'): UsePumpDeviceResul
     } else if (cmd.status === 'executed') {
       if (device.status.motorStatus === 'ON') {
         setPipelinePhase('motor_on');
-        setPipelineMessage('Motor confirmed ON (Current verified)');
+        setPipelineMessage('Motor confirmed ON (Telemetry verified)');
       } else if (device.status.motorStatus === 'OFF') {
         setPipelinePhase('motor_off');
-        setPipelineMessage('Motor confirmed OFF');
+        setPipelineMessage('Motor confirmed OFF (Contactor disengaged)');
       }
 
       // Clear pipeline message after 3.5 seconds
@@ -107,18 +132,18 @@ export function usePumpDevice(deviceId: string = 'Pump-001'): UsePumpDeviceResul
 
       try {
         setPipelinePhase('sending');
-        setPipelineMessage('Sending command to cloud...');
+        setPipelineMessage('Sending command to cloud queue...');
 
         const sentCmd = await pumpService.sendCommand(deviceId, type);
         setActiveCommandId(sentCmd.commandId);
 
         setPipelinePhase('sent');
-        setPipelineMessage('Command sent. Waiting for ESP32...');
+        setPipelineMessage('Command queued in cloud. Awaiting ESP32 acknowledgement...');
 
         // Watchdog timeout: if device doesn't respond within 12 seconds
         timeoutRef.current = setTimeout(() => {
           setPipelinePhase('timeout');
-          setPipelineMessage('Device not responding — Motor status unknown');
+          setPipelineMessage('Device not responding — Motor state unconfirmed');
         }, 12000);
       } catch (error: any) {
         setPipelinePhase('failed');
@@ -144,7 +169,7 @@ export function usePumpDevice(deviceId: string = 'Pump-001'): UsePumpDeviceResul
       const sentCmd = await pumpService.emergencyStop(deviceId);
       setActiveCommandId(sentCmd.commandId);
       setPipelinePhase('sent');
-      setPipelineMessage('EMERGENCY command sent to hardware');
+      setPipelineMessage('EMERGENCY command sent to hardware bus');
 
       timeoutRef.current = setTimeout(() => {
         setPipelinePhase('timeout');
@@ -160,15 +185,19 @@ export function usePumpDevice(deviceId: string = 'Pump-001'): UsePumpDeviceResul
     await dispatchCommand('RESET_FAULT');
   }, [dispatchCommand]);
 
-  const pendingAction = pipelinePhase === 'sending' || pipelinePhase === 'sent' || pipelinePhase === 'acknowledged';
+  const pendingAction =
+    pipelinePhase === 'sending' || pipelinePhase === 'sent' || pipelinePhase === 'acknowledged';
 
-  // Automated Schedule Background Monitor
+  // Automated Schedule Background Monitor (only executes if device is online)
   useEffect(() => {
     if (!device?.schedule?.enabled || !device.schedule.startTime || !device.schedule.stopTime) {
       return;
     }
 
     const checkSchedule = () => {
+      // Do NOT dispatch automated commands if device is known to be offline
+      if (!isOnline) return;
+
       const now = new Date();
       const currentDay = now.getDay();
       const activeDays = device.schedule?.daysOfWeek || [];
@@ -199,12 +228,13 @@ export function usePumpDevice(deviceId: string = 'Pump-001'): UsePumpDeviceResul
     checkSchedule();
     const interval = setInterval(checkSchedule, 15000);
     return () => clearInterval(interval);
-  }, [device?.schedule, device?.status?.motorStatus, device?.status?.fault, pendingAction, turnOnPump, turnOffPump]);
+  }, [device?.schedule, device?.status?.motorStatus, device?.status?.fault, isOnline, pendingAction, turnOnPump, turnOffPump]);
 
   return {
     device,
     loading,
     isOnline,
+    isFirebaseConnected,
     lastSeenText,
     pipelinePhase,
     pipelineMessage,

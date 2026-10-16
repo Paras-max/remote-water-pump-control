@@ -17,7 +17,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
   deviceId,
   activeStartedAt,
 }) => {
-  const todayTotalSec = sessionService.calculateTodayTotalSeconds(sessions, activeStartedAt);
+  const todayTotalSec = sessionService.calculateTodayTotalSeconds(sessions, activeStartedAt, Boolean(activeStartedAt));
   const totalDurationSec = sessions.reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
   const faultCount = sessions.filter((s) => s.faultOccurred).length;
   const avgSessionSec = sessions.length > 0 ? Math.round(totalDurationSec / sessions.length) : 0;
@@ -36,7 +36,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
             {sessionService.formatDuration(todayTotalSec)}
           </div>
           <div className="text-[11px] text-slate-500 mt-1 font-mono">
-            Across {sessions.filter((s) => s.startedAt >= new Date().setHours(0, 0, 0, 0)).length} cycles today
+            Across {sessions.filter((s) => (s.stoppedAt || s.startedAt) >= new Date().setHours(0, 0, 0, 0)).length} cycles today
           </div>
         </div>
 

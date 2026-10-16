@@ -35,6 +35,7 @@ export function App() {
     device,
     loading,
     isOnline,
+    isFirebaseConnected,
     lastSeenText,
     pipelinePhase,
     pipelineMessage,
@@ -44,6 +45,14 @@ export function App() {
     resetFault,
     pendingAction,
   } = usePumpDevice(deviceId);
+
+  // Keep simulator mode reactive
+  useEffect(() => {
+    const unsub = simulationService.subscribe((enabled) => {
+      setIsSimulationMode(enabled);
+    });
+    return unsub;
+  }, []);
 
   // Subscribe to sessions and logs
   useEffect(() => {
@@ -103,10 +112,13 @@ export function App() {
               <DashboardPage
                 device={device}
                 isOnline={isOnline}
+                isFirebaseConnected={isFirebaseConnected}
                 lastSeenText={lastSeenText}
                 pipelinePhase={pipelinePhase}
                 pipelineMessage={pipelineMessage}
                 pendingAction={pendingAction}
+                sessions={sessions}
+                simulated={isSimulationMode}
                 onTurnOn={turnOnPump}
                 onTurnOff={turnOffPump}
                 onEmergencyOff={emergencyStop}

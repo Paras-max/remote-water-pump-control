@@ -1005,12 +1005,36 @@ void executePumpOff(
     &svTimestamp
   );
 
+  // ---------------------------------------------------------
+  // RECORD COMPLETED SESSION TO FIREBASE /sessions
+  // ---------------------------------------------------------
+  if (durationSec > 0) {
+    time_t curEpoch = time(nullptr);
+    String sessId = "sess_" + String((unsigned long)curEpoch) + "_" + String(random(100, 999));
+    String sessPath = "/devices/" + String(DEVICE_ID) + "/sessions/" + sessId;
+
+    FirebaseJson sessJson;
+    sessJson.set("id", sessId);
+    sessJson.set("deviceId", String(DEVICE_ID));
+    if (curEpoch > 1577836800) {
+      sessJson.set("startedAt", (double)(curEpoch - durationSec) * 1000.0);
+      sessJson.set("stoppedAt", (double)curEpoch * 1000.0);
+    } else {
+      sessJson.set("startedAt", (double)millis());
+      sessJson.set("stoppedAt", (double)millis());
+    }
+    sessJson.set("durationSeconds", (int)durationSec);
+    sessJson.set("averageCurrent", 4.30);
+    sessJson.set("faultOccurred", hasFault);
+    sessJson.set("stopReason", isEmergency ? "EMERGENCY_OFF" : (hasFault ? "FAULT_TRIP" : "USER_COMMAND"));
+
+    Firebase.RTDB.setJSON(&fbdo, sessPath.c_str(), &sessJson);
+  }
 
   Serial.printf(
     "[State] Motor stopped. Total run: %lu sec.\n",
     durationSec
   );
-
 }
 
 
@@ -1457,6 +1481,19 @@ void checkIncomingCommands() {
         ")"
       );
 
+      // Safety check: Ignore stale PUMP_ON commands older than 60 seconds
+      json.get(data, "createdAt");
+      double createdAtMs = data.doubleValue;
+      time_t curEpoch = time(nullptr);
+      if (curEpoch > 1577836800 && createdAtMs > 1577836800000.0) {
+        double ageSec = ((double)curEpoch * 1000.0 - createdAtMs) / 1000.0;
+        if (ageSec > 60.0 && cmd == "PUMP_ON") {
+          Serial.printf("[Safety Alert] Discarded stale PUMP_ON command from offline queue (Age: %.0fs)\n", ageSec);
+          Firebase.RTDB.setString(&fbdo, (cmdPath + "/status").c_str(), "timeout");
+          Firebase.RTDB.setString(&fbdo, (cmdPath + "/errorMessage").c_str(), "Safety: Command expired while ESP32 was offline");
+          return;
+        }
+      }
 
       activeCommandId =
         cmdId;
