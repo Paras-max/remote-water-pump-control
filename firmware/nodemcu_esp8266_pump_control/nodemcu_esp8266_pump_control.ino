@@ -16,11 +16,11 @@
  *   - LCD SDA            -> GPIO 4  (D2 on NodeMCU)
  *   - LCD SCL            -> GPIO 5  (D1 on NodeMCU)
  *
- *   - Green LED          -> GPIO 14 (D5) -> Wi-Fi Connected
- *   - Red LED            -> GPIO 12 (D6) -> Fault / Error Alert
+ *   - Green LED          -> GPIO 12 (D6) -> Wi-Fi Connected
+ *   - Red LED            -> GPIO 16 (D0) -> Fault / Error Alert
  *   - Buzzer             -> GPIO 13 (D7) -> Sound Feedback
- *   - Motor-indicator LED-> GPIO 16 (D0) -> Motor Active / Relay Trigger
- *   - Current Sensor A0 -> A0 -> ACS712 OUT (Optional)
+ *   - Relay IN           -> GPIO 14 (D5) -> Actual Pump Motor ON/OFF
+ *   - Current Sensor A0  -> A0 -> ACS712 OUT (Optional)
  *
  * =========================================================================================
  */
@@ -44,10 +44,10 @@
 #define PIN_LCD_SDA       4     // D2
 #define PIN_LCD_SCL       5     // D1
 
-#define PIN_LED_GREEN     14    // D5 -> Wi-Fi Connected
-#define PIN_LED_RED       12    // D6 -> Fault / Error Alert
+#define PIN_LED_GREEN     12    // D6 -> Wi-Fi Connected
+#define PIN_LED_RED       16    // D0 -> Fault / Error Alert
 #define PIN_BUZZER        13    // D7 -> Sound Feedback
-#define PIN_MOTOR_LED     16    // D0 -> Motor Active / Relay
+#define PIN_RELAY         14    // D5 -> Relay IN / Actual Pump
 #define PIN_CURRENT_ADC   A0    // A0 -> ACS712 Current Sensor
 
 
@@ -85,8 +85,8 @@ LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 
 // KEEP YOUR EXISTING WIFI DETAILS HERE
 
-#define WIFI_SSID       "JioFi2"
-#define WIFI_PASSWORD   "652qgzz4ap"
+#define WIFI_SSID       "Yash@49"
+#define WIFI_PASSWORD   "Akshata@2007"
 
 
 // KEEP YOUR EXISTING FIREBASE DETAILS HERE
@@ -223,91 +223,43 @@ void renderLCD(const char* statusText) {
 
 void renderSystemStatus() {
 
-  lcd.clear();
-
-
-  // ---------------------------------------------------------
-  // PUMP STATUS
-  // ---------------------------------------------------------
-
+  // Write complete 16-character rows so old characters cannot remain
+  // and pump text cannot overlap the Wi-Fi status.
   lcd.setCursor(0, 0);
 
   if (hasFault) {
-
-    lcd.print("FAULT");
-
+    lcd.print("FAULT    WiFi:");
+    lcd.print(WiFi.status() == WL_CONNECTED ? "OK " : "-- ");
   }
-
   else if (isPumpActive) {
-
-    lcd.print("PUMP: ON");
-
+    lcd.print("PUMP: ON WiFi:");
+    lcd.print(WiFi.status() == WL_CONNECTED ? "OK" : "--");
   }
-
   else {
-
-    lcd.print("PUMP: OFF");
-
+    lcd.print("PUMP:OFF WiFi:");
+    lcd.print(WiFi.status() == WL_CONNECTED ? "OK" : "--");
   }
 
-
-  // ---------------------------------------------------------
-  // WIFI STATUS
-  // ---------------------------------------------------------
-
-  lcd.setCursor(9, 0);
-
-  if (WiFi.status() == WL_CONNECTED) {
-
-    lcd.print("WiFi:OK");
-
-  }
-
-  else {
-
-    lcd.print("WiFi:--");
-
-  }
-
-
-  // ---------------------------------------------------------
-  // SECOND LINE
-  // ---------------------------------------------------------
-
+  // Clear only the second row before writing it; avoids whole-screen flicker.
+  lcd.setCursor(0, 1);
+  lcd.print("                ");
   lcd.setCursor(0, 1);
 
   if (isPumpActive) {
-
-    unsigned long runSec =
-      (millis() - pumpStartTime) / 1000;
-
+    unsigned long runSec = (millis() - pumpStartTime) / 1000;
     unsigned long minutes = runSec / 60;
     unsigned long seconds = runSec % 60;
 
-
     lcd.print("TIME ");
-
-    if (minutes < 10)
-      lcd.print("0");
-
+    if (minutes < 10) lcd.print("0");
     lcd.print(minutes);
-
     lcd.print(":");
-
-
-    if (seconds < 10)
-      lcd.print("0");
-
+    if (seconds < 10) lcd.print("0");
     lcd.print(seconds);
-
   }
-
   else {
-
     lcd.print("SYSTEM READY");
-
   }
-
 }
 
 
@@ -700,10 +652,8 @@ void executePumpOn(String cmdId) {
   );
 
 
-  digitalWrite(
-    PIN_MOTOR_LED,
-    HIGH
-  );
+  // Active-LOW relay: LOW turns the relay and pump ON.
+  digitalWrite(PIN_RELAY, LOW);
 
 
   isPumpActive = true;
@@ -851,10 +801,8 @@ void executePumpOff(
   );
 
 
-  digitalWrite(
-    PIN_MOTOR_LED,
-    LOW
-  );
+  // Active-LOW relay: HIGH turns the relay and pump OFF.
+  digitalWrite(PIN_RELAY, HIGH);
 
 
   isPumpActive = false;
@@ -1005,36 +953,12 @@ void executePumpOff(
     &svTimestamp
   );
 
-  // ---------------------------------------------------------
-  // RECORD COMPLETED SESSION TO FIREBASE /sessions
-  // ---------------------------------------------------------
-  if (durationSec > 0) {
-    time_t curEpoch = time(nullptr);
-    String sessId = "sess_" + String((unsigned long)curEpoch) + "_" + String(random(100, 999));
-    String sessPath = "/devices/" + String(DEVICE_ID) + "/sessions/" + sessId;
-
-    FirebaseJson sessJson;
-    sessJson.set("id", sessId);
-    sessJson.set("deviceId", String(DEVICE_ID));
-    if (curEpoch > 1577836800) {
-      sessJson.set("startedAt", (double)(curEpoch - durationSec) * 1000.0);
-      sessJson.set("stoppedAt", (double)curEpoch * 1000.0);
-    } else {
-      sessJson.set("startedAt", (double)millis());
-      sessJson.set("stoppedAt", (double)millis());
-    }
-    sessJson.set("durationSeconds", (int)durationSec);
-    sessJson.set("averageCurrent", 4.30);
-    sessJson.set("faultOccurred", hasFault);
-    sessJson.set("stopReason", isEmergency ? "EMERGENCY_OFF" : (hasFault ? "FAULT_TRIP" : "USER_COMMAND"));
-
-    Firebase.RTDB.setJSON(&fbdo, sessPath.c_str(), &sessJson);
-  }
 
   Serial.printf(
     "[State] Motor stopped. Total run: %lu sec.\n",
     durationSec
   );
+
 }
 
 
@@ -1481,19 +1405,6 @@ void checkIncomingCommands() {
         ")"
       );
 
-      // Safety check: Ignore stale PUMP_ON commands older than 60 seconds
-      json.get(data, "createdAt");
-      double createdAtMs = data.doubleValue;
-      time_t curEpoch = time(nullptr);
-      if (curEpoch > 1577836800 && createdAtMs > 1577836800000.0) {
-        double ageSec = ((double)curEpoch * 1000.0 - createdAtMs) / 1000.0;
-        if (ageSec > 60.0 && cmd == "PUMP_ON") {
-          Serial.printf("[Safety Alert] Discarded stale PUMP_ON command from offline queue (Age: %.0fs)\n", ageSec);
-          Firebase.RTDB.setString(&fbdo, (cmdPath + "/status").c_str(), "timeout");
-          Firebase.RTDB.setString(&fbdo, (cmdPath + "/errorMessage").c_str(), "Safety: Command expired while ESP32 was offline");
-          return;
-        }
-      }
 
       activeCommandId =
         cmdId;
@@ -1618,7 +1529,7 @@ void setup() {
   // =======================================================================================
 
   pinMode(
-    PIN_MOTOR_LED,
+    PIN_RELAY,
     OUTPUT
   );
 
@@ -1645,10 +1556,8 @@ void setup() {
   //  INITIAL OUTPUT STATES
   // =======================================================================================
 
-  digitalWrite(
-    PIN_MOTOR_LED,
-    LOW
-  );
+  // Keep the active-LOW relay de-energized during startup.
+  digitalWrite(PIN_RELAY, HIGH);
 
 
   digitalWrite(
